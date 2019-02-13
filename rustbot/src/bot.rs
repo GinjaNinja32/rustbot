@@ -19,13 +19,18 @@ impl Bot {
                 return
             }
 
-            if self.conf.cmdchars.contains(message.get(0..1).unwrap()) {
-                // it's a command!
-                let parts: Vec<&str> = message.get(1..).unwrap().splitn(2, " ").collect();
-                match self.commands.get(parts[0]).map(|&c| c) {
-                    Some(f) => f(self, channel.as_str(), parts.get(1).unwrap_or(&"")),
-                    None => ()
-                }
+            match message.get(0..1) {
+                Some(c) => {
+                    if self.conf.cmdchars.contains(c) {
+                        // it's a command!
+                        let parts: Vec<&str> = message[1..].splitn(2, " ").collect();
+                        match self.commands.get(parts[0]).map(|&c| c) {
+                            Some(f) => f(self, channel.as_str(), parts.get(1).unwrap_or(&"")),
+                            None => ()
+                        }
+                    }
+                },
+                None => ()
             }
         }
     }
@@ -33,21 +38,27 @@ impl Bot {
 
 impl types::Bot for Bot {
     fn send_privmsg(&self, chan: &str, msg: &str) {
-        self.client.send_privmsg(chan, msg).unwrap();
+        match self.client.send_privmsg(chan, msg) {
+            Ok(_) => (),
+            Err(e) => print!("failed to send privmsg: {}", e)
+        }
     }
 
     fn load_module(&mut self, name: &str) {
-        let lib = Library::new(format!("libmod_{}.so", name)).unwrap();
-
-        let m = Module{
-            name: name.to_string(),
-            lib: lib,
-        };
-        let meta = m.get_meta();
-        for command in meta.commands.iter() {
-            self.commands.insert(command.0.to_string(), *command.1);
+        match Library::new(format!("libmod_{}.so", name)) {
+            Ok(lib) => {
+                let m = Module{
+                    name: name.to_string(),
+                    lib: lib,
+                };
+                let meta = m.get_meta();
+                for command in meta.commands.iter() {
+                    self.commands.insert(command.0.to_string(), *command.1);
+                }
+                self.modules.insert(name.to_string(), m);
+            },
+            Err(e) => print!("failed to load module: {}", e)
         }
-        self.modules.insert(name.to_string(), m);
     }
 }
 
