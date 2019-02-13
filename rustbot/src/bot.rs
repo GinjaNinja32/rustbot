@@ -2,6 +2,7 @@ use libloading::{Library, Symbol};
 use irc::client::prelude::*;
 use std::rc::Rc;
 use std::collections::HashMap;
+use std::io;
 use shared::types;
 use config;
 
@@ -87,8 +88,9 @@ struct Module {
 impl Module {
     fn get_meta(&self) -> types::Meta {
         unsafe {
-            let func: Symbol<fn() -> types::Meta> = match self.lib.get(b"get_meta") {
-                Ok(func) => func,
+            let result: Result<Symbol<unsafe extern fn() -> types::Meta>, io::Error> = self.lib.get(b"get_meta");
+            match result {
+                Ok(func) => return func(),
                 Err(err) => {
                     println!("{}: failed to find get_meta function: {}", self.name, err);
                     return types::Meta{
@@ -96,8 +98,6 @@ impl Module {
                     };
                 }
             };
-
-            return func()
         }
     }
 }
