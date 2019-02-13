@@ -1,0 +1,7 @@
+[workspace]
+members = [
+"rustbot",
+"shared",
+"mod_admin",
+"mod_test",
+]

@@ -1,0 +1,5 @@
+nickname = "testbot"
+server = "irc.sorcery.net"
+username = "testbot"
+realname = "testbot"
+channels = ["#bot32-test"]

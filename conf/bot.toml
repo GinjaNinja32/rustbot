@@ -1,0 +1,2 @@
+cmdchars = "."
+modules = ["foo", "bar"]
