@@ -9,4 +9,5 @@ pub struct Meta {
 pub trait Bot {
     fn send_privmsg(&self, &str, &str);
     fn load_module(&mut self, &str);
+    fn drop_module(&mut self, &str);
 }

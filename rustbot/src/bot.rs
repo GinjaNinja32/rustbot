@@ -45,6 +45,18 @@ impl types::Bot for Bot {
         }
     }
 
+    fn drop_module(&mut self, name: &str) {
+        match self.modules.remove(name) {
+            Some(m) => {
+                let meta = m.get_meta();
+                for command in meta.commands.iter() {
+                    self.commands.remove(command.0);
+                }
+            },
+            None => ()
+        }
+    }
+
     fn load_module(&mut self, name: &str) {
         match Library::new(format!("libmod_{}.so", name)) {
             Ok(lib) => {
