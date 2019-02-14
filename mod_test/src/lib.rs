@@ -1,13 +1,12 @@
 extern crate shared;
 
 use shared::types;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
-    let mut commands: HashMap<String, types::Command> = HashMap::new();
-    commands.insert("test".to_string(), |ctx, args| {
-        println!("test command with args = {:?}", args);
+    let mut commands: BTreeMap<String, types::Command> = BTreeMap::new();
+    commands.insert("test".to_string(), |ctx, _args| {
         ctx.reply("beep boop");
     });
     types::Meta { commands }

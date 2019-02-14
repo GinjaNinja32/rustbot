@@ -54,7 +54,12 @@ impl types::Bot for Bot {
     }
 
     fn load_module(&mut self, name: &str) {
-        match Library::new(format!("libmod_{}.so", name)) {
+        let libpath = if cfg!(debug_assertions) {
+            format!("libmod_{}.so", name)
+        } else {
+            format!("target/release/libmod_{}.so", name)
+        };
+        match Library::new(libpath) {
             Ok(lib) => {
                 let m = Module {
                     //name: name.to_string(),
@@ -102,7 +107,9 @@ pub fn start() {
     };
     client.send_cap_req(&[Capability::MultiPrefix]).unwrap();
     client.identify().unwrap();
-    types::Bot::load_module(b, "admin"); // WHY
+    for m in b.conf.modules.clone().iter() {
+        types::Bot::load_module(b, m.as_str()); // WHY
+    }
     client
         .for_each_incoming(|irc_msg| b.incoming(irc_msg))
         .unwrap();

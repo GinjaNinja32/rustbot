@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub type Command = fn(&mut Context, args: &str);
 
 pub struct Meta {
-    pub commands: HashMap<String, Command>,
+    pub commands: BTreeMap<String, Command>,
 }
 
 pub trait Context {
