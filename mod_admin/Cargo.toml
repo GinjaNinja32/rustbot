@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 
 [lib]
-crate_type = ["cdylib"]
+crate_type = ["dylib"]
 
 [dependencies]
 shared = { path = "../shared" }
