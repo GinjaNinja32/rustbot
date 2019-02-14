@@ -10,5 +10,5 @@ pub extern "C" fn get_meta() -> types::Meta {
         println!("test command with args = {:?}", args);
         bot.send_privmsg(channel, "beep boop");
     });
-    return types::Meta { commands: commands };
+    types::Meta { commands }
 }

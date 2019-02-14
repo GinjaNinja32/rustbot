@@ -16,45 +16,45 @@ struct Bot {
 impl Bot {
     fn incoming(&mut self, irc_msg: Message) {
         if let Command::PRIVMSG(channel, message) = irc_msg.command {
-            message.get(0..1).map(|c| {
+            if let Some(c) = message.get(0..1) {
                 if self.conf.cmdchars.contains(c) {
                     // it's a command!
-                    let parts: Vec<&str> = message[1..].splitn(2, " ").collect();
-                    self.commands
-                        .get(parts[0])
-                        .map(|&c| c)
-                        .map(|f| f(self, channel.as_str(), parts.get(1).unwrap_or(&"")));
+                    let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
+                    if let Some(f) = self.commands.get(parts[0]).cloned() {
+                        f(self, channel.as_str(), parts.get(1).unwrap_or(&""))
+                    }
                 }
-            });
+            }
         }
     }
 }
 
 impl types::Bot for Bot {
     fn send_privmsg(&self, chan: &str, msg: &str) {
-        self.client
-            .send_privmsg(chan, msg)
-            .err()
-            .map(|e| print!("failed to send privmsg: {}", e));
+        if let Some(e) = self.client.send_privmsg(chan, msg).err() {
+            print!("failed to send privmsg: {}", e)
+        }
     }
 
     fn drop_module(&mut self, name: &str) {
-        self.modules.remove(name).map(|m| match m.get_meta() {
-            Ok(meta) => {
-                for command in meta.commands.iter() {
-                    self.commands.remove(command.0);
+        if let Some(m) = self.modules.remove(name) {
+            match m.get_meta() {
+                Ok(meta) => {
+                    for command in meta.commands.iter() {
+                        self.commands.remove(command.0);
+                    }
                 }
+                Err(e) => print!("failed to get module metadata: {}", e),
             }
-            Err(e) => print!("failed to get module metadata: {}", e),
-        });
+        }
     }
 
     fn load_module(&mut self, name: &str) {
         match Library::new(format!("libmod_{}.so", name)) {
             Ok(lib) => {
                 let m = Module {
-                    name: name.to_string(),
-                    lib: lib,
+                    //name: name.to_string(),
+                    lib,
                 };
                 match m.get_meta() {
                     Ok(meta) => {
@@ -78,7 +78,7 @@ pub fn start() {
     let client = Rc::new(IrcClient::new("conf/irc.toml").unwrap());
     let b = &mut Bot {
         client: Rc::clone(&client),
-        conf: conf,
+        conf,
         modules: HashMap::new(),
         commands: HashMap::new(),
     };
@@ -91,7 +91,7 @@ pub fn start() {
 }
 
 struct Module {
-    name: String,
+    //name: String,
     lib: Library,
 }
 
