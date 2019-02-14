@@ -16,16 +16,16 @@ struct Bot {
 impl Bot {
     fn incoming(&mut self, irc_msg: Message) {
         if let Command::PRIVMSG(channel, message) = irc_msg.command {
-            let ctx = &Context {
+            let ctx = &mut Context {
+                bot: self,
                 channel: channel,
-                message: message,
             };
-            if let Some(c) = ctx.message.get(0..1) {
-                if self.conf.cmdchars.contains(c) {
+            if let Some(c) = message.get(0..1) {
+                if ctx.bot.conf.cmdchars.contains(c) {
                     // it's a command!
-                    let parts: Vec<&str> = ctx.message[1..].splitn(2, ' ').collect();
-                    if let Some(f) = self.commands.get(parts[0]).cloned() {
-                        f(self, ctx, parts.get(1).unwrap_or(&""))
+                    let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
+                    if let Some(f) = ctx.bot.commands.get(parts[0]).cloned() {
+                        f(ctx, parts.get(1).unwrap_or(&""))
                     }
                 }
             }
@@ -75,14 +75,17 @@ impl types::Bot for Bot {
     }
 }
 
-struct Context {
+struct Context<'a> {
+    bot: &'a mut Bot,
     channel: String,
-    message: String,
 }
 
-impl types::Context for Context {
-    fn reply(&self, bot: &types::Bot, message: &str) {
-        bot.send_privmsg(self.channel.as_str(), message);
+impl<'a> types::Context for Context<'a> {
+    fn reply(&self, message: &str) {
+        types::Bot::send_privmsg(self.bot, self.channel.as_str(), message);
+    }
+    fn bot(&mut self) -> &mut types::Bot {
+        return self.bot;
     }
 }
 

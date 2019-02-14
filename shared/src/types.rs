@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
-pub type Command = fn(&mut Bot, &Context, args: &str);
+pub type Command = fn(&mut Context, args: &str);
 
 pub struct Meta {
     pub commands: HashMap<String, Command>,
 }
 
 pub trait Context {
-    fn reply(&self, &Bot, &str);
+    fn reply(&self, &str);
+    fn bot(&mut self) -> &mut Bot;
 }
 
 pub trait Bot {

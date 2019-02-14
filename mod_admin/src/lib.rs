@@ -12,27 +12,27 @@ pub fn get_meta() -> types::Meta {
     types::Meta { commands }
 }
 
-fn drop(bot: &mut types::Bot, ctx: &types::Context, args: &str) {
+fn drop(ctx: &mut types::Context, args: &str) {
     for m in args.split(' ') {
         println!("dropping {}", m);
-        bot.drop_module(m);
+        ctx.bot().drop_module(m);
     }
-    ctx.reply(bot, "done");
+    ctx.reply("done");
 }
 
-fn load(bot: &mut types::Bot, ctx: &types::Context, args: &str) {
+fn load(ctx: &mut types::Context, args: &str) {
     for m in args.split(' ') {
         println!("loading {}", m);
-        bot.load_module(m);
+        ctx.bot().load_module(m);
     }
-    ctx.reply(bot, "done");
+    ctx.reply("done");
 }
 
-fn reload(bot: &mut types::Bot, ctx: &types::Context, args: &str) {
+fn reload(ctx: &mut types::Context, args: &str) {
     for m in args.split(' ') {
         println!("reloading {}", m);
-        bot.drop_module(m);
-        bot.load_module(m);
+        ctx.bot().drop_module(m);
+        ctx.bot().load_module(m);
     }
-    ctx.reply(bot, "done");
+    ctx.reply("done");
 }
