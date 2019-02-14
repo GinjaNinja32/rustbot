@@ -16,49 +16,35 @@ struct Bot {
 impl Bot {
     fn incoming(&mut self, irc_msg: Message) {
         if let Command::PRIVMSG(channel, message) = irc_msg.command {
-            if message.is_empty() {
-                return
-            }
-
-            match message.get(0..1) {
-                Some(c) => {
-                    if self.conf.cmdchars.contains(c) {
-                        // it's a command!
-                        let parts: Vec<&str> = message[1..].splitn(2, " ").collect();
-                        match self.commands.get(parts[0]).map(|&c| c) {
-                            Some(f) => f(self, channel.as_str(), parts.get(1).unwrap_or(&"")),
-                            None => ()
-                        }
-                    }
-                },
-                None => ()
-            }
+            message.get(0..1).map(|c| {
+                if self.conf.cmdchars.contains(c) {
+                    // it's a command!
+                    let parts: Vec<&str> = message[1..].splitn(2, " ").collect();
+                    self.commands.get(parts[0]).map(|&c| c).map(|f| {
+                        f(self, channel.as_str(), parts.get(1).unwrap_or(&""))
+                    });
+                }
+            });
         }
     }
 }
 
 impl types::Bot for Bot {
     fn send_privmsg(&self, chan: &str, msg: &str) {
-        match self.client.send_privmsg(chan, msg) {
-            Ok(_) => (),
-            Err(e) => print!("failed to send privmsg: {}", e)
-        }
+        self.client.send_privmsg(chan, msg).err().map(|e| print!("failed to send privmsg: {}", e));
     }
 
     fn drop_module(&mut self, name: &str) {
-        match self.modules.remove(name) {
-            Some(m) => {
-                match m.get_meta() {
-                    Ok(meta) => {
-                        for command in meta.commands.iter() {
-                            self.commands.remove(command.0);
-                        }
-                    },
-                    Err(e) => print!("failed to get module metadata: {}", e)
-                }
-            },
-            None => ()
-        }
+        self.modules.remove(name).map(|m| {
+            match m.get_meta() {
+                Ok(meta) => {
+                    for command in meta.commands.iter() {
+                        self.commands.remove(command.0);
+                    }
+                },
+                Err(e) => print!("failed to get module metadata: {}", e)
+            }
+        });
     }
 
     fn load_module(&mut self, name: &str) {
