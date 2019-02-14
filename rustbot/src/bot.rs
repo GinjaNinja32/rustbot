@@ -48,9 +48,13 @@ impl types::Bot for Bot {
     fn drop_module(&mut self, name: &str) {
         match self.modules.remove(name) {
             Some(m) => {
-                let meta = m.get_meta();
-                for command in meta.commands.iter() {
-                    self.commands.remove(command.0);
+                match m.get_meta() {
+                    Ok(meta) => {
+                        for command in meta.commands.iter() {
+                            self.commands.remove(command.0);
+                        }
+                    },
+                    Err(e) => print!("failed to get module metadata: {}", e)
                 }
             },
             None => ()
@@ -64,9 +68,13 @@ impl types::Bot for Bot {
                     name: name.to_string(),
                     lib: lib,
                 };
-                let meta = m.get_meta();
-                for command in meta.commands.iter() {
-                    self.commands.insert(command.0.to_string(), *command.1);
+                match m.get_meta() {
+                    Ok(meta) => {
+                        for command in meta.commands.iter() {
+                            self.commands.insert(command.0.to_string(), *command.1);
+                        }
+                    },
+                    Err(e) => print!("failed to get module metadata: {}", e)
                 }
                 self.modules.insert(name.to_string(), m);
             },
@@ -98,18 +106,9 @@ struct Module {
 }
 
 impl Module {
-    fn get_meta(&self) -> types::Meta {
+    fn get_meta(&self) -> Result<types::Meta, io::Error> {
         unsafe {
-            let result: Result<Symbol<unsafe extern fn() -> types::Meta>, io::Error> = self.lib.get(b"get_meta");
-            match result {
-                Ok(func) => return func(),
-                Err(err) => {
-                    println!("{}: failed to find get_meta function: {}", self.name, err);
-                    return types::Meta{
-                        commands: HashMap::new(),
-                    };
-                }
-            };
+            self.lib.get(b"get_meta").map(|f: Symbol<unsafe extern fn() -> types::Meta>| f())
         }
     }
 }
