@@ -1,7 +1,7 @@
 extern crate shared;
 
-use std::collections::HashMap;
 use shared::types;
+use std::collections::HashMap;
 
 #[no_mangle]
 pub extern "C" fn get_meta() -> types::Meta {
@@ -20,7 +20,5 @@ pub extern "C" fn get_meta() -> types::Meta {
         }
         bot.send_privmsg(channel, "done");
     });
-    return types::Meta{
-        commands: commands,
-    }
+    return types::Meta { commands: commands };
 }
