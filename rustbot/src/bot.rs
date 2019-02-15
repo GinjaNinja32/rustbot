@@ -3,14 +3,14 @@ use irc::client::prelude::*;
 use libloading::{Library, Symbol};
 use shared::types;
 use shared::types::Bot;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 struct IRCBot {
     client: Rc<IrcClient>,
     conf: config::Config,
-    modules: HashMap<String, Module>,
-    commands: HashMap<String, types::Command>,
+    modules: BTreeMap<String, Module>,
+    commands: BTreeMap<String, types::Command>,
 }
 
 impl IRCBot {
@@ -102,8 +102,8 @@ pub fn start() {
     let b = &mut IRCBot {
         client: Rc::clone(&client),
         conf,
-        modules: HashMap::new(),
-        commands: HashMap::new(),
+        modules: BTreeMap::new(),
+        commands: BTreeMap::new(),
     };
     client.send_cap_req(&[Capability::MultiPrefix]).unwrap();
     client.identify().unwrap();
