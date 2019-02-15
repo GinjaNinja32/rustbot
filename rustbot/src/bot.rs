@@ -2,18 +2,18 @@ use config;
 use irc::client::prelude::*;
 use libloading::{Library, Symbol};
 use shared::types;
+use shared::types::Bot;
 use std::collections::HashMap;
-use std::io;
 use std::rc::Rc;
 
-struct Bot {
+struct IRCBot {
     client: Rc<IrcClient>,
     conf: config::Config,
     modules: HashMap<String, Module>,
     commands: HashMap<String, types::Command>,
 }
 
-impl Bot {
+impl IRCBot {
     fn incoming(&mut self, irc_msg: Message) {
         if let Command::PRIVMSG(channel, message) = irc_msg.command {
             let ctx = &mut Context {
@@ -33,10 +33,10 @@ impl Bot {
     }
 }
 
-impl types::Bot for Bot {
+impl Bot for IRCBot {
     fn send_privmsg(&self, chan: &str, msg: &str) {
         if let Some(e) = self.client.send_privmsg(chan, msg).err() {
-            print!("failed to send privmsg: {}", e)
+            println!("failed to send privmsg: {}", e)
         }
     }
 
@@ -48,7 +48,7 @@ impl types::Bot for Bot {
                         self.commands.remove(command.0);
                     }
                 }
-                Err(e) => print!("failed to get module metadata: {}", e),
+                Err(e) => println!("failed to get module metadata: {}", e),
             }
         }
     }
@@ -71,25 +71,25 @@ impl types::Bot for Bot {
                             self.commands.insert(command.0.to_string(), *command.1);
                         }
                     }
-                    Err(e) => print!("failed to get module metadata: {}", e),
+                    Err(e) => println!("failed to get module metadata: {}", e),
                 }
                 self.modules.insert(name.to_string(), m);
             }
-            Err(e) => print!("failed to load module: {}", e),
+            Err(e) => println!("failed to load module: {}", e),
         }
     }
 }
 
 struct Context<'a> {
-    bot: &'a mut Bot,
+    bot: &'a mut IRCBot,
     channel: String,
 }
 
 impl<'a> types::Context for Context<'a> {
     fn reply(&self, message: &str) {
-        types::Bot::send_privmsg(self.bot, self.channel.as_str(), message);
+        self.bot.send_privmsg(self.channel.as_str(), message);
     }
-    fn bot(&mut self) -> &mut types::Bot {
+    fn bot(&mut self) -> &mut Bot {
         return self.bot;
     }
 }
@@ -99,7 +99,7 @@ pub fn start() {
     println!("{:?}", conf);
 
     let client = Rc::new(IrcClient::new("conf/irc.toml").unwrap());
-    let b = &mut Bot {
+    let b = &mut IRCBot {
         client: Rc::clone(&client),
         conf,
         modules: HashMap::new(),
@@ -108,7 +108,7 @@ pub fn start() {
     client.send_cap_req(&[Capability::MultiPrefix]).unwrap();
     client.identify().unwrap();
     for m in b.conf.modules.clone().iter() {
-        types::Bot::load_module(b, m.as_str()); // WHY
+        b.load_module(m.as_str());
     }
     client
         .for_each_incoming(|irc_msg| b.incoming(irc_msg))
@@ -121,11 +121,17 @@ struct Module {
 }
 
 impl Module {
-    fn get_meta(&self) -> Result<types::Meta, io::Error> {
+    fn get_meta(&self) -> Result<types::Meta, String> {
         unsafe {
             self.lib
                 .get(b"get_meta")
-                .map(|f: Symbol<unsafe fn() -> types::Meta>| f())
+                .map_err(|e| format!("{}", e))
+                .and_then(
+                    |f: Symbol<Option<unsafe fn() -> types::Meta>>| match Symbol::lift_option(f) {
+                        Some(f) => Ok(f()),
+                        None => Err("symbol not found".to_string()),
+                    },
+                )
         }
     }
 }
