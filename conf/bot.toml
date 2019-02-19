@@ -1,2 +1,2 @@
 cmdchars = "."
-modules = ["admin", "test"]
+modules = ["core", "test"]

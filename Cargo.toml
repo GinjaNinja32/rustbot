@@ -2,6 +2,6 @@
 members = [
 "rustbot",
 "shared",
-"mod_admin",
+"mod_core",
 "mod_test",
 ]
