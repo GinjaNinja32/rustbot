@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 pub fn get_meta() -> types::Meta {
 	let mut commands: BTreeMap<String, types::Command> = BTreeMap::new();
 	// commands.insert("foo".to_string(), foo);
-	types::Meta{ commands }
+	types::Meta { commands }
 }
 endef
 export librs
