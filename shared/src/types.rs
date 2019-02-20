@@ -1,9 +1,27 @@
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
-pub type Command = fn(&mut Context, args: &str);
+pub type Command = Rc<Fn(&mut Context, &str)>;
 
 pub struct Meta {
-    pub commands: BTreeMap<String, Command>,
+    commands: BTreeMap<String, Command>,
+}
+
+impl Meta {
+    pub fn new() -> Meta {
+        Meta {
+            commands: BTreeMap::new(),
+        }
+    }
+    pub fn command(&mut self, name: &str, f: fn(&mut Context, &str)) {
+        self.commands.insert(name.to_string(), Rc::new(f));
+    }
+    pub fn commandrc(&mut self, name: &str, f: Command) {
+        self.commands.insert(name.to_string(), f);
+    }
+    pub fn commands(&self) -> &BTreeMap<String, Command> {
+        &self.commands
+    }
 }
 
 pub trait Context {

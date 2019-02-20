@@ -1,18 +1,28 @@
 extern crate shared;
 
 use shared::types;
-use std::collections::BTreeMap;
 use std::process::Command;
 use std::str;
+use std::rc::Rc;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
-    let mut commands: BTreeMap<String, types::Command> = BTreeMap::new();
-    commands.insert("drop".to_string(), drop);
-    commands.insert("load".to_string(), load);
-    commands.insert("reload".to_string(), reload);
-    commands.insert("recompile".to_string(), recompile);
-    types::Meta { commands }
+    let mut meta = types::Meta::new();
+    meta.commandrc("drop", Rc::new(wrap(drop)));
+    meta.commandrc("load", Rc::new(wrap(load)));
+    meta.commandrc("reload", Rc::new(wrap(reload)));
+    meta.commandrc("recompile", Rc::new(wrap(recompile)));
+    meta
+}
+
+fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &str) {
+    move |ctx: &mut types::Context, args| {
+        if ctx.has_perm("admin") {
+            f(ctx, args)
+        } else {
+            ctx.reply("permission denied")
+        }
+    }
 }
 
 fn exec(ctx: &mut types::Context, args: &str, what: fn(&mut types::Context, &str)) {

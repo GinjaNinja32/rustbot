@@ -67,7 +67,7 @@ impl Bot for IRCBot {
         if let Some(m) = self.modules.remove(name) {
             match m.get_meta() {
                 Ok(meta) => {
-                    for command in meta.commands.iter() {
+                    for command in meta.commands().iter() {
                         self.commands.remove(command.0);
                     }
                 }
@@ -90,8 +90,8 @@ impl Bot for IRCBot {
                 };
                 match m.get_meta() {
                     Ok(meta) => {
-                        for command in meta.commands.iter() {
-                            self.commands.insert(command.0.to_string(), *command.1);
+                        for command in meta.commands().iter() {
+                            self.commands.insert(command.0.to_string(), (*command.1).clone());
                         }
                     }
                     Err(e) => println!("failed to get module metadata: {}", e),
