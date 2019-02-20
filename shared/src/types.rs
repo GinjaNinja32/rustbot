@@ -8,6 +8,7 @@ pub struct Meta {
 
 pub trait Context {
     fn reply(&self, &str);
+    fn has_perm(&self, &str) -> bool;
     fn get_source(&self) -> Option<Source>;
     fn bot(&mut self) -> &mut Bot;
 }
@@ -16,6 +17,7 @@ pub trait Bot {
     fn send_privmsg(&self, &str, &str);
     fn load_module(&mut self, &str);
     fn drop_module(&mut self, &str);
+    fn has_perm(&self, &str, &str) -> bool;
 }
 
 #[derive(Debug, Clone)]

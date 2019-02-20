@@ -1,2 +1,5 @@
 cmdchars = "."
 modules = ["core", "test", "dice"]
+
+[permissions]
+ginjaninja32 = ["admin"]

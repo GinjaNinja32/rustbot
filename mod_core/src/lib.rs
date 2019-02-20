@@ -17,6 +17,10 @@ pub fn get_meta() -> types::Meta {
 
 fn exec(ctx: &mut types::Context, args: &str, what: fn(&mut types::Context, &str)) {
     for m in args.split(' ') {
+        if m == "core" {
+            ctx.reply("skipping core");
+            continue
+        }
         what(ctx, m);
     }
     ctx.reply("done");

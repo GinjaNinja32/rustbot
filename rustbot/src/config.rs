@@ -1,12 +1,14 @@
 use serde_derive::Deserialize;
 use std::fs::File;
 use std::io::Read;
+use std::collections::BTreeMap;
 
 const CONFIG_PATH: &str = "conf/bot.toml";
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub cmdchars: String,
     pub modules: Vec<String>,
+    pub permissions: BTreeMap<String, Vec<String>>,
 }
 
 pub fn load_config() -> Config {

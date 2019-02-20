@@ -413,7 +413,8 @@ pub enum ModOp {
 }
 impl ModOp {
     fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> EvaluatedValue {
-        let l = left.as_int_slice();
+        let mut l = left.as_int_slice();
+        l.sort();
         let r = right.as_i64() as usize;
         let result = match self {
             ModOp::DropLowest => &l[r..],

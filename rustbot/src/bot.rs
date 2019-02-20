@@ -101,6 +101,13 @@ impl Bot for IRCBot {
             Err(e) => println!("failed to load module: {}", e),
         }
     }
+
+    fn has_perm(&self, who: &str, what: &str) -> bool {
+        match self.conf.permissions.get(who) {
+            Some(lst) => lst.contains(&what.to_string()),
+            None => false,
+        }
+    }
 }
 
 struct Context<'a> {
@@ -134,6 +141,13 @@ impl<'a> types::Context for Context<'a> {
     }
     fn bot(&mut self) -> &mut Bot {
         self.bot
+    }
+    fn has_perm(&self, what: &str) -> bool {
+        match self.source {
+            Some(User{nick: ref n, ..}) => self.bot.has_perm(n.to_lowercase().as_str(), what),
+            Some(Server(_)) => false,
+            None => false
+        }
     }
 }
 
