@@ -3,6 +3,7 @@ use irc::client::prelude::*;
 use libloading::{Library, Symbol};
 use shared::types;
 use shared::types::Bot;
+use shared::types::Source::*;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -15,10 +16,32 @@ struct IRCBot {
 
 impl IRCBot {
     fn incoming(&mut self, irc_msg: Message) {
+        let source = match irc_msg.prefix {
+            None => None,
+            Some(s) => {
+                if !s.contains('!') {
+                    Some(Server(s))
+                } else {
+                    let ss = s.clone();
+                    let nr: Vec<&str> = ss.splitn(2, '!').collect();
+                    if !nr[1].contains('@') {
+                        Some(Server(s))
+                    } else {
+                        let uh: Vec<&str> = nr[1].splitn(2, '@').collect();
+                        Some(User {
+                            nick: nr[0].to_string(),
+                            user: uh[0].to_string(),
+                            host: uh[1].to_string(),
+                        })
+                    }
+                }
+            }
+        };
         if let Command::PRIVMSG(channel, message) = irc_msg.command {
             let ctx = &mut Context {
                 bot: self,
                 channel: channel,
+                source: source,
             };
             if let Some(c) = message.get(0..1) {
                 if ctx.bot.conf.cmdchars.contains(c) {
@@ -83,14 +106,34 @@ impl Bot for IRCBot {
 struct Context<'a> {
     bot: &'a mut IRCBot,
     channel: String,
+    source: Option<types::Source>,
 }
 
 impl<'a> types::Context for Context<'a> {
     fn reply(&self, message: &str) {
-        self.bot.send_privmsg(self.channel.as_str(), message);
+        if self.channel == self.bot.client.current_nickname() {
+            if let Some(User { nick, .. }) = self.get_source() {
+                self.bot.send_privmsg(nick.as_str(), message);
+            }
+        } else {
+            if let Some(User { nick, .. }) = self.get_source() {
+                self.bot.send_privmsg(
+                    self.channel.as_str(),
+                    &format!("{}: {}", nick.as_str(), message),
+                );
+            } else {
+                self.bot.send_privmsg(self.channel.as_str(), message);
+            }
+        }
+    }
+    fn get_source(&self) -> Option<types::Source> {
+        match self.source {
+            Some(ref c) => Some(c.clone()),
+            None => None,
+        }
     }
     fn bot(&mut self) -> &mut Bot {
-        return self.bot;
+        self.bot
     }
 }
 

@@ -3,5 +3,6 @@ members = [
 "rustbot",
 "shared",
 "mod_core",
+"mod_dice",
 "mod_test",
 ]
