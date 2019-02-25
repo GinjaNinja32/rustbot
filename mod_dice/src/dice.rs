@@ -21,31 +21,38 @@ trait Evaluable {
 }
 enum EvaluatedValue {
     Integer(i64),
-    Bool(bool),
     IntSlice(Vec<i64>),
+    Bool(bool),
+    BoolSlice(Vec<bool>),
 }
 impl EvaluatedValue {
     fn as_i64(&self) -> i64 {
         match self {
             EvaluatedValue::Integer(i) => *i,
+            EvaluatedValue::IntSlice(s) => s.iter().fold(0, |x, y| x + y),
             EvaluatedValue::Bool(true) => 1,
             EvaluatedValue::Bool(false) => 0,
-            EvaluatedValue::IntSlice(s) => s.iter().fold(0, |x, y| x + y),
+            EvaluatedValue::BoolSlice(s) => s.iter().filter(|&v| *v).count() as i64,
         }
     }
     fn as_int_slice(&self) -> Vec<i64> {
         match self {
             EvaluatedValue::Integer(i) => vec![*i],
+            EvaluatedValue::IntSlice(s) => s.to_vec(),
             EvaluatedValue::Bool(true) => vec![1 as i64],
             EvaluatedValue::Bool(false) => vec![0 as i64],
-            EvaluatedValue::IntSlice(s) => s.to_vec(),
+            EvaluatedValue::BoolSlice(s) => s.iter().map(|&v| if v { 1 } else { 0 }).collect(),
         }
     }
     fn to_string(&self) -> String {
         match self {
             EvaluatedValue::Integer(i) => format!("{}", i),
-            EvaluatedValue::Bool(b) => format!("{}", b),
             EvaluatedValue::IntSlice(s) => {
+                let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
+                format!("[{}]", v.join(", "))
+            }
+            EvaluatedValue::Bool(b) => format!("{}", b),
+            EvaluatedValue::BoolSlice(s) => {
                 let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
                 format!("[{}]", v.join(", "))
             }
@@ -120,9 +127,11 @@ impl Evaluable for Comparison {
             None => Ok(l),
             Some((op, term)) => {
                 let r = term.eval()?;
-                let v = op.apply(l.1, r.1);
-
-                Ok((format!("{}{}{}", l.0, op, r.0), v))
+                let (os, v) = op.apply(l.1, r.1)?;
+                match os {
+                    None => Ok((format!("{}{}{}", l.0, op, r.0), v)),
+                    Some(s) => Ok((format!("{}{}{}={}", l.0, op, r.0, s), v))
+                }
             }
         }
     }
@@ -313,7 +322,8 @@ impl DiceRoll {
                                 (1..).take(i as usize).collect()
                             }
                             EvaluatedValue::IntSlice(s) => s,
-                            EvaluatedValue::Bool(_) => panic!("foo"),
+                            EvaluatedValue::Bool(b) => return Err(format!("cannot roll a d{}", b)),
+                            EvaluatedValue::BoolSlice(b) => return Err(format!("cannot roll a d{:?}", b)),
                         };
                         (vs, opts)
                     }
@@ -458,18 +468,33 @@ pub enum CompareOp {
     Unequal,   // !=, <>
 }
 impl CompareOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> EvaluatedValue {
-        let l = left.as_i64();
-        let r = right.as_i64();
-        let result = match self {
+    fn compare(&self, l: i64, r: i64) -> bool {
+        match self {
             CompareOp::Less => l < r,
             CompareOp::LessEq => l <= r,
             CompareOp::Greater => l > r,
             CompareOp::GreaterEq => l >= r,
             CompareOp::Equal => l == r,
             CompareOp::Unequal => l != r,
-        };
-        EvaluatedValue::Bool(result)
+        }
+    }
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Option<String>, EvaluatedValue), String> {
+        let l = left.as_i64();
+        match right {
+            EvaluatedValue::Integer(v) => Ok((None, EvaluatedValue::Bool(self.compare(l, v)))),
+            EvaluatedValue::IntSlice(s) => {
+                let (strings, values): (Vec<String>, Vec<bool>) = s.iter().map(|r| {
+                    if self.compare(l, *r) {
+                        (format!("{}{}{}", GREEN, *r, RESET), true)
+                    } else {
+                        (format!("{}{}{}", RED, *r, RESET), false)
+                    }
+                }).unzip();
+                Ok((Some(format!("[{}]", strings.join(", "))), EvaluatedValue::BoolSlice(values)))
+            }
+            EvaluatedValue::Bool(b) => Err(format!("cannot compare {} {} {}", l, self, b)),
+            EvaluatedValue::BoolSlice(s) => Err(format!("cannot compare {} {} {:?}", l, self, s))
+        }
     }
 }
 impl Display for CompareOp {
@@ -501,7 +526,9 @@ pub enum ModOp {
 
 const RED : &str = "\x0304";
 const YELLOW: &str = "\x0308";
+const GREEN: &str = "\x0309";
 const RESET: &str = "\x03\x02\x02";
+
 fn format_arrays(ac: &str, aa: &[i64], bc: &str, ba: &[i64]) -> String {
     let a: Vec<String> = aa.iter().map(|v| format!("{}{}{}", ac, v, RESET)).collect();
     let b: Vec<String> = ba.iter().map(|v| format!("{}{}{}", bc, v, RESET)).collect();
