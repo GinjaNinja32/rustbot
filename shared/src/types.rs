@@ -36,6 +36,7 @@ pub trait Bot {
     fn load_module(&mut self, &str);
     fn drop_module(&mut self, &str);
     fn has_perm(&self, &str, &str) -> bool;
+    fn send_raw(&mut self, &str);
 }
 
 #[derive(Debug, Clone)]

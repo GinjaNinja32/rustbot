@@ -108,6 +108,13 @@ impl Bot for IRCBot {
             None => false,
         }
     }
+
+    fn send_raw(&mut self, what: &str) {
+        match self.client.send(what) {
+            Ok(()) => (),
+            Err(e) => println!("failed to send message: {}", e),
+        }
+    }
 }
 
 struct Context<'a> {

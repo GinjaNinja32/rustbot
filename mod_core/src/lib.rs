@@ -12,6 +12,8 @@ pub fn get_meta() -> types::Meta {
     meta.commandrc("load", Rc::new(wrap(load)));
     meta.commandrc("reload", Rc::new(wrap(reload)));
     meta.commandrc("recompile", Rc::new(wrap(recompile)));
+
+    meta.commandrc("raw", Rc::new(wrap(raw)));
     meta
 }
 
@@ -77,4 +79,8 @@ fn recompile(ctx: &mut types::Context, args: &str) {
         }
         Err(e) => ctx.reply(&format!("failed to run build: {}", e)),
     }
+}
+
+fn raw(ctx: &mut types::Context, args: &str) {
+    ctx.bot().send_raw(args);
 }
