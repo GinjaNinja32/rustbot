@@ -371,17 +371,17 @@ impl DiceRoll {
 named!(value<&str, Value>, alt!(
     map!(number, |v| Value::Integer(v)) |
     map!(delimited!(tag!("("), expression, tag!(")")), |v| Value::Sub(Box::new(v))) |
-    map!(delimited!(tag!("["), separated_list!(tag!(","), number), tag!("]")), |v| Value::Slice(v)) |
+    map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| Value::Slice(v)) |
     value!(Value::Fate, tag!("F")) |
     value!(Value::Hundred, tag!("%"))
 ));
 #[derive(Debug)]
 pub enum Value {
-    Integer(i64),         // ...
-    Sub(Box<Expression>), // "(" ... ")"
-    Slice(Vec<i64>),      // "[" ... "]"
-    Fate,                 // "F"
-    Hundred,              // "%"
+    Integer(i64),           // ...
+    Sub(Box<Expression>),   // "(" ... ")"
+    Slice(Vec<Expression>), // "[" ... "]"
+    Fate,                   // "F"
+    Hundred,                // "%"
 }
 impl Evaluable for Value {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
@@ -391,7 +391,17 @@ impl Evaluable for Value {
                 let (es, ev) = expr.eval()?;
                 Ok((format!("({})", es), ev))
             }
-            Value::Slice(s) => Ok((format!("{:?}", s), EvaluatedValue::IntSlice(s.clone()))),
+            Value::Slice(s) => {
+                let r: Result<Vec<(String, EvaluatedValue)>, _> = s.iter().map(|v| v.eval()).collect();
+                match r {
+                    Err(e) => Err(e),
+                    Ok(v) => {
+                        let strs: Vec<String> = v.iter().map(|&(ref s, _)| s.clone()).collect();
+                        let vals: Vec<i64> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
+                        Ok((format!("[{}]", strs.join(", ")), EvaluatedValue::IntSlice(vals)))
+                    }
+                }
+            }
             Value::Fate => Ok(("F".to_string(), EvaluatedValue::IntSlice(vec![-1, 0, 1]))),
             Value::Hundred => Ok(("%".to_string(), EvaluatedValue::Integer(100))),
         }
