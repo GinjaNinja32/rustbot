@@ -43,13 +43,32 @@ impl IRCBot {
                 channel: channel,
                 source: source,
             };
-            if let Some(c) = message.get(0..1) {
-                if ctx.bot.conf.cmdchars.contains(c) {
-                    // it's a command!
-                    let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
-                    if let Some(f) = ctx.bot.commands.get(parts[0]).cloned() {
-                        f(ctx, parts.get(1).unwrap_or(&""))
-                    }
+            ctx.handle(message.as_str());
+
+            if let Some("\x02<") = message.get(0..2) {
+                let parts: Vec<&str> = message[2..].splitn(2, ">\x02 ").collect();
+                if parts.len() == 2 {
+                    ctx.source = match &ctx.source {
+                        Some(User{ nick, user, host }) =>
+                            Some(User{
+                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                                user: format!("{}-{}", nick, user),
+                                host: host.to_string(),
+                            }),
+                        Some(Server(s)) =>
+                            Some(User{
+                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                                user: "user".to_string(),
+                                host: s.to_string(),
+                            }),
+                        None =>
+                            Some(User{
+                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                                user: "user".to_string(),
+                                host: "discord".to_string(),
+                            }),
+                    };
+                    ctx.handle(parts[1]);
                 }
             }
         }
@@ -121,6 +140,21 @@ struct Context<'a> {
     bot: &'a mut IRCBot,
     channel: String,
     source: Option<types::Source>,
+}
+
+impl<'a> Context<'a> {
+    fn handle(&mut self, message: &str) {
+        if let Some(c) = message.get(0..1) {
+            if self.bot.conf.cmdchars.contains(c) {
+                // it's a command!
+                let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
+                if let Some(f) = self.bot.commands.get(parts[0]).cloned() {
+                    f(self, parts.get(1).unwrap_or(&""));
+                }
+                return;
+            }
+        }
+    }
 }
 
 impl<'a> types::Context for Context<'a> {

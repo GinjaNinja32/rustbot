@@ -29,13 +29,12 @@ define librs
 extern crate shared;
 
 use shared::types;
-use std::collections::BTreeMap;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
-	let mut commands: BTreeMap<String, types::Command> = BTreeMap::new();
-	// commands.insert("foo".to_string(), foo);
-	types::Meta { commands }
+	let mut meta = types::Meta::new();
+	// meta.command("foo", foo);
+	meta
 }
 endef
 export librs
