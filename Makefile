@@ -32,9 +32,9 @@ use shared::types;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
-	let mut meta = types::Meta::new();
-	// meta.command("foo", foo);
-	meta
+    let mut meta = types::Meta::new();
+    // meta.command("foo", foo);
+    meta
 }
 endef
 export librs
