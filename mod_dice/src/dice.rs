@@ -497,7 +497,7 @@ impl Display for MulDivOp {
     }
 }
 
-named!(compareOp<&str, CompareOp>, ws!(alt!(
+named!(compareOp<&str, CompareOp>, sp!(alt!(
     value!(CompareOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
     value!(CompareOp::Less, tag!("<")) |
     value!(CompareOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
