@@ -19,7 +19,7 @@ pub fn get_meta() -> types::Meta {
 
 fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &str) {
     move |ctx: &mut types::Context, args| {
-        if ctx.has_perm("admin") {
+        if ctx.has_perm(types::PERM_ADMIN) {
             f(ctx, args)
         } else {
             ctx.reply("permission denied")
@@ -69,5 +69,5 @@ fn whoami(ctx: &mut types::Context, _: &str) {
             ctx.reply(&format!("You are {}!{}@{}", nick, user, host))
         }
     }
-    ctx.reply(&format!("Admin: {}", ctx.has_perm("admin")));
+    ctx.reply(&format!("Flags: {}", ctx.perms()));
 }

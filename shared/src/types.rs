@@ -2,6 +2,8 @@ use rusqlite::Connection;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+pub const PERM_ADMIN: u64 = 1;
+
 pub type Command = Rc<Fn(&mut Context, &str)>;
 
 pub struct Meta {
@@ -27,16 +29,18 @@ impl Meta {
 
 pub trait Context {
     fn reply(&self, &str);
-    fn has_perm(&self, &str) -> bool;
+    fn perms(&self) -> u64;
+    fn has_perm(&self, u64) -> bool;
     fn get_source(&self) -> Option<Source>;
     fn bot(&mut self) -> &mut Bot;
 }
 
 pub trait Bot {
     fn send_privmsg(&self, &str, &str);
-    fn load_module(&mut self, &str);
-    fn drop_module(&mut self, &str);
-    fn has_perm(&self, &str, &str) -> bool;
+    fn load_module(&mut self, &str) -> Result<(), String>;
+    fn drop_module(&mut self, &str) -> Result<(), String>;
+    fn perms(&self, Source) -> u64;
+    fn has_perm(&self, Source, u64) -> bool;
     fn send_raw(&mut self, &str);
 
     fn sql(&mut self) -> &Connection;

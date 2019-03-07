@@ -6,7 +6,7 @@ use shared::types;
 pub fn get_meta() -> types::Meta {
     let mut meta = types::Meta::new();
     meta.command("test", |ctx: &mut types::Context, _args| {
-        ctx.reply(&format!("beep boop {}", ctx.has_perm("admin")));
+        ctx.reply(&format!("beep boop {}", ctx.perms()));
     });
     meta
 }

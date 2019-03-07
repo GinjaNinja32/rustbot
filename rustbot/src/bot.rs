@@ -1,7 +1,7 @@
-use config;
+use db;
 use irc::client::prelude::*;
 use libloading::{Library, Symbol};
-use rusqlite::Connection;
+use rusqlite::{Connection, NO_PARAMS};
 use shared::types;
 use shared::types::Bot;
 use shared::types::Source::*;
@@ -11,7 +11,6 @@ use std::rc::Rc;
 struct IRCBot {
     client: Rc<IrcClient>,
     db: rusqlite::Connection,
-    conf: config::Config,
     modules: BTreeMap<String, Module>,
     commands: BTreeMap<String, types::Command>,
 }
@@ -81,20 +80,29 @@ impl Bot for IRCBot {
         }
     }
 
-    fn drop_module(&mut self, name: &str) {
+    fn drop_module(&mut self, name: &str) -> Result<(), String> {
         if let Some(m) = self.modules.remove(name) {
+            self.db
+                .execute(
+                    "INSERT INTO modules (name, enabled) VALUES (?, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
+                    vec![name],
+                )
+                .map_err(|e| format!("{}", e))?;
             match m.get_meta() {
                 Ok(meta) => {
                     for command in meta.commands().iter() {
                         self.commands.remove(command.0);
                     }
+                    Ok(())
                 }
-                Err(e) => println!("failed to get module metadata: {}", e),
+                Err(e) => Err(format!("failed to get module metadata: {}", e)),
             }
+        } else {
+            Ok(())
         }
     }
 
-    fn load_module(&mut self, name: &str) {
+    fn load_module(&mut self, name: &str) -> Result<(), String> {
         let libpath = if cfg!(debug_assertions) {
             format!("libmod_{}.so", name)
         } else {
@@ -102,6 +110,12 @@ impl Bot for IRCBot {
         };
         match Library::new(libpath) {
             Ok(lib) => {
+                self.db
+                    .execute(
+                        "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
+                        vec![name],
+                    )
+                    .map_err(|e| format!("{}", e))?;
                 let m = Module {
                     //name: name.to_string(),
                     lib,
@@ -113,18 +127,41 @@ impl Bot for IRCBot {
                                 .insert(command.0.to_string(), (*command.1).clone());
                         }
                     }
-                    Err(e) => println!("failed to get module metadata: {}", e),
+                    Err(e) => return Err(format!("failed to get module metadata: {}", e)),
                 }
                 self.modules.insert(name.to_string(), m);
+                Ok(())
             }
-            Err(e) => println!("failed to load module: {}", e),
+            Err(e) => Err(format!("failed to load module: {}", e)),
         }
     }
 
-    fn has_perm(&self, who: &str, what: &str) -> bool {
-        match self.conf.permissions.get(who) {
-            Some(lst) => lst.contains(&what.to_string()),
-            None => false,
+    fn has_perm(&self, who: types::Source, what: u64) -> bool {
+        (self.perms(who) & what) != 0
+    }
+
+    fn perms(&self, who: types::Source) -> u64 {
+        match who {
+            User {
+                nick: n,
+                user: u,
+                host: h,
+            } => {
+                let perms: i64 = match self.db.query_row(
+                    "SELECT flags FROM permissions WHERE nick = ? AND user = ? AND host = ?",
+                    vec![n, u, h],
+                    |row| row.get(0),
+                ) {
+                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                    Err(e) => {
+                        println!("error: {}", e);
+                        0
+                    }
+                    Ok(v) => v,
+                };
+                return perms as u64;
+            }
+            Server(_) => 0,
         }
     }
 
@@ -148,8 +185,13 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn handle(&mut self, message: &str) {
+        let cmdchars: String = self
+            .bot
+            .db
+            .query_row("SELECT cmdchars FROM config", NO_PARAMS, |row| row.get(0))
+            .unwrap();
         if let Some(c) = message.get(0..1) {
-            if self.bot.conf.cmdchars.contains(c) {
+            if cmdchars.contains(c) {
                 // it's a command!
                 let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
                 if let Some(f) = self.bot.commands.get(parts[0]).cloned() {
@@ -187,31 +229,40 @@ impl<'a> types::Context for Context<'a> {
     fn bot(&mut self) -> &mut Bot {
         self.bot
     }
-    fn has_perm(&self, what: &str) -> bool {
-        match self.source {
-            Some(User { nick: ref n, .. }) => self.bot.has_perm(n.to_lowercase().as_str(), what),
-            Some(Server(_)) => false,
-            None => false,
+    fn has_perm(&self, what: u64) -> bool {
+        (self.perms() & what) != 0
+    }
+    fn perms(&self) -> u64 {
+        if let Some(ref src) = self.source {
+            return self.bot.perms(src.clone());
         }
+        return 0;
     }
 }
 
 pub fn start() {
-    let conf = config::load_config();
-    println!("{:?}", conf);
-
     let client = Rc::new(IrcClient::new("conf/irc.toml").unwrap());
     let b = &mut IRCBot {
         client: Rc::clone(&client),
-        db: Connection::open("rustbot.db").unwrap(),
-        conf,
+        db: db::open().unwrap(),
         modules: BTreeMap::new(),
         commands: BTreeMap::new(),
     };
     client.send_cap_req(&[Capability::MultiPrefix]).unwrap();
     client.identify().unwrap();
-    for m in b.conf.modules.clone().iter() {
-        b.load_module(m.as_str());
+
+    let modules: Vec<String> =
+        b.db.prepare("SELECT name FROM modules WHERE enabled = true")
+            .and_then(|mut stmt| {
+                stmt.query_map(NO_PARAMS, |row| {
+                    let s: String = row.get(0);
+                    s.clone()
+                })
+                .and_then(|v| v.collect())
+            })
+            .unwrap();
+    for m in modules {
+        b.load_module(m.as_str()).unwrap();
     }
     client
         .for_each_incoming(|irc_msg| b.incoming(irc_msg))

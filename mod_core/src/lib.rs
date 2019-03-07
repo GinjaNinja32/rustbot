@@ -2,8 +2,8 @@ extern crate shared;
 
 use shared::types;
 use std::process::Command;
-use std::str;
 use std::rc::Rc;
+use std::str;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
@@ -17,7 +17,7 @@ pub fn get_meta() -> types::Meta {
 
 fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &str) {
     move |ctx: &mut types::Context, args| {
-        if ctx.has_perm("admin") {
+        if ctx.has_perm(types::PERM_ADMIN) {
             f(ctx, args)
         } else {
             ctx.reply("permission denied")
@@ -25,30 +25,37 @@ fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &
     }
 }
 
-fn exec(ctx: &mut types::Context, args: &str, what: fn(&mut types::Context, &str)) {
+fn exec(
+    ctx: &mut types::Context,
+    args: &str,
+    what: fn(&mut types::Context, &str) -> Result<(), String>,
+) {
     for m in args.split(' ') {
         if m == "core" {
             ctx.reply("skipping core");
-            continue
+            continue;
         }
-        what(ctx, m);
+        match what(ctx, m) {
+            Ok(()) => (),
+            Err(e) => ctx.reply(&format!("{} failed: {}", m, e)),
+        }
     }
     ctx.reply("done");
 }
 
 fn drop(ctx: &mut types::Context, args: &str) {
-    exec(ctx, args, |ctx, m| ctx.bot().drop_module(m));
+    exec(ctx, args, |ctx, m| ctx.bot().drop_module(m))
 }
 
 fn load(ctx: &mut types::Context, args: &str) {
-    exec(ctx, args, |ctx, m| ctx.bot().load_module(m));
+    exec(ctx, args, |ctx, m| ctx.bot().load_module(m))
 }
 
 fn reload(ctx: &mut types::Context, args: &str) {
     exec(ctx, args, |ctx, m| {
-        ctx.bot().drop_module(m);
-        ctx.bot().load_module(m);
-    });
+        ctx.bot().drop_module(m)?;
+        ctx.bot().load_module(m)
+    })
 }
 
 fn recompile(ctx: &mut types::Context, args: &str) {
