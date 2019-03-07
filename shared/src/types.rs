@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -37,6 +38,8 @@ pub trait Bot {
     fn drop_module(&mut self, &str);
     fn has_perm(&self, &str, &str) -> bool;
     fn send_raw(&mut self, &str);
+
+    fn sql(&mut self) -> &Connection;
 }
 
 #[derive(Debug, Clone)]

@@ -1,6 +1,7 @@
 use config;
 use irc::client::prelude::*;
 use libloading::{Library, Symbol};
+use rusqlite::Connection;
 use shared::types;
 use shared::types::Bot;
 use shared::types::Source::*;
@@ -9,6 +10,7 @@ use std::rc::Rc;
 
 struct IRCBot {
     client: Rc<IrcClient>,
+    db: rusqlite::Connection,
     conf: config::Config,
     modules: BTreeMap<String, Module>,
     commands: BTreeMap<String, types::Command>,
@@ -49,24 +51,21 @@ impl IRCBot {
                 let parts: Vec<&str> = message[2..].splitn(2, ">\x02 ").collect();
                 if parts.len() == 2 {
                     ctx.source = match &ctx.source {
-                        Some(User{ nick, user, host }) =>
-                            Some(User{
-                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
-                                user: format!("{}-{}", nick, user),
-                                host: host.to_string(),
-                            }),
-                        Some(Server(s)) =>
-                            Some(User{
-                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
-                                user: "user".to_string(),
-                                host: s.to_string(),
-                            }),
-                        None =>
-                            Some(User{
-                                nick: format!("@{}", parts[0].replace("\u{feff}", "")),
-                                user: "user".to_string(),
-                                host: "discord".to_string(),
-                            }),
+                        Some(User { nick, user, host }) => Some(User {
+                            nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                            user: format!("{}-{}", nick, user),
+                            host: host.to_string(),
+                        }),
+                        Some(Server(s)) => Some(User {
+                            nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                            user: "user".to_string(),
+                            host: s.to_string(),
+                        }),
+                        None => Some(User {
+                            nick: format!("@{}", parts[0].replace("\u{feff}", "")),
+                            user: "user".to_string(),
+                            host: "discord".to_string(),
+                        }),
                     };
                     ctx.handle(parts[1]);
                 }
@@ -110,7 +109,8 @@ impl Bot for IRCBot {
                 match m.get_meta() {
                     Ok(meta) => {
                         for command in meta.commands().iter() {
-                            self.commands.insert(command.0.to_string(), (*command.1).clone());
+                            self.commands
+                                .insert(command.0.to_string(), (*command.1).clone());
                         }
                     }
                     Err(e) => println!("failed to get module metadata: {}", e),
@@ -133,6 +133,10 @@ impl Bot for IRCBot {
             Ok(()) => (),
             Err(e) => println!("failed to send message: {}", e),
         }
+    }
+
+    fn sql(&mut self) -> &Connection {
+        &self.db
     }
 }
 
@@ -185,9 +189,9 @@ impl<'a> types::Context for Context<'a> {
     }
     fn has_perm(&self, what: &str) -> bool {
         match self.source {
-            Some(User{nick: ref n, ..}) => self.bot.has_perm(n.to_lowercase().as_str(), what),
+            Some(User { nick: ref n, .. }) => self.bot.has_perm(n.to_lowercase().as_str(), what),
             Some(Server(_)) => false,
-            None => false
+            None => false,
         }
     }
 }
@@ -199,6 +203,7 @@ pub fn start() {
     let client = Rc::new(IrcClient::new("conf/irc.toml").unwrap());
     let b = &mut IRCBot {
         client: Rc::clone(&client),
+        db: Connection::open("rustbot.db").unwrap(),
         conf,
         modules: BTreeMap::new(),
         commands: BTreeMap::new(),

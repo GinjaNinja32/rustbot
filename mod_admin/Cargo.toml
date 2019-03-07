@@ -7,4 +7,5 @@ authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 crate_type = ["dylib"]
 
 [dependencies]
+rusqlite = "0.16.0"
 shared = { path = "../shared" }

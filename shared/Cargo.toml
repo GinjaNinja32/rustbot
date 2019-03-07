@@ -3,4 +3,8 @@ name = "shared"
 version = "0.1.0"
 authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 
+[lib]
+crate-type = ["dylib"]
+
 [dependencies]
+rusqlite = "0.16.0"

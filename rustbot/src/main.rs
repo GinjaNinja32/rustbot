@@ -1,5 +1,6 @@
 extern crate irc;
 extern crate libloading;
+extern crate rusqlite;
 extern crate serde_derive;
 extern crate shared;
 
