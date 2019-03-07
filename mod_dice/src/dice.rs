@@ -4,6 +4,27 @@ use std::fmt;
 use std::fmt::Display;
 use std::iter;
 
+// enums
+use self::EvaluatedValue::*;
+
+// space eater
+named!(space<&str,&str>, eat_separator!(" \t"));
+macro_rules! sp (
+  ($i:expr, $($args:tt)*) => (
+    {
+      match sep!($i, space, $($args)*) {
+        Err(e) => Err(e),
+        Ok((i1,o))    => {
+          match space(i1) {
+            Err(e) => Err(e),
+            Ok((i2,_))    => Ok((i2, o))
+          }
+        }
+      }
+    }
+  )
+);
+
 pub fn parse(input: &str) -> Result<Expression, String> {
     fullexpr(&format!("{}\n", input))
         .map(|(_, c)| c)
@@ -25,34 +46,49 @@ enum EvaluatedValue {
     Bool(bool),
     BoolSlice(Vec<bool>),
 }
-impl EvaluatedValue {
-    fn as_i64(&self) -> i64 {
+impl Display for EvaluatedValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(),fmt::Error> {
         match self {
-            EvaluatedValue::Integer(i) => *i,
-            EvaluatedValue::IntSlice(s) => s.iter().fold(0, |x, y| x + y),
-            EvaluatedValue::Bool(true) => 1,
-            EvaluatedValue::Bool(false) => 0,
-            EvaluatedValue::BoolSlice(s) => s.iter().filter(|&v| *v).count() as i64,
+            Integer(i) => write!(f, "{}", i),
+            IntSlice(s) => {
+                let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
+                write!(f, "[{}]", strs.join(", "))
+            }
+            Bool(b) => write!(f, "{}", b),
+            BoolSlice(s) => {
+                let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
+                write!(f, "[{}]", strs.join(", "))
+            }
         }
     }
-    fn as_int_slice(&self) -> Vec<i64> {
+}
+impl EvaluatedValue {
+    fn as_i64(&self) -> Result<i64, String> {
         match self {
-            EvaluatedValue::Integer(i) => vec![*i],
-            EvaluatedValue::IntSlice(s) => s.to_vec(),
-            EvaluatedValue::Bool(true) => vec![1 as i64],
-            EvaluatedValue::Bool(false) => vec![0 as i64],
-            EvaluatedValue::BoolSlice(s) => s.iter().map(|&v| if v { 1 } else { 0 }).collect(),
+            Integer(i) =>Ok(*i),
+            IntSlice(s) => Ok(s.iter().fold(0, |x, y| x + y)),
+            Bool(true) => Ok(1),
+            Bool(false) => Ok(0),
+            BoolSlice(s) => Ok(s.iter().filter(|&v| *v).count() as i64),
+        }
+    }
+    fn as_int_slice(&self) -> Result<Vec<i64>, String> {
+        match self {
+            Integer(i) => Err(format!("cannot convert {} to slice", i)),
+            IntSlice(s) => Ok(s.to_vec()),
+            Bool(b) => Err(format!("cannot convert {} to slice", b)),
+            BoolSlice(s) => Ok(s.iter().map(|&v| if v { 1 } else { 0 }).collect()),
         }
     }
     fn to_string(&self) -> String {
         match self {
-            EvaluatedValue::Integer(i) => format!("{}", i),
-            EvaluatedValue::IntSlice(s) => {
+            Integer(i) => format!("{}", i),
+            IntSlice(s) => {
                 let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
                 format!("[{}]", v.join(", "))
             }
-            EvaluatedValue::Bool(b) => format!("{}", b),
-            EvaluatedValue::BoolSlice(s) => {
+            Bool(b) => format!("{}", b),
+            BoolSlice(s) => {
                 let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
                 format!("[{}]", v.join(", "))
             }
@@ -77,7 +113,7 @@ impl Evaluable for Expression {
     }
 }
 
-named!(repeat<&str, Repeat>, alt!(
+named!(repeat<&str, Repeat>, sp!(alt!(
     do_parse!(
         n: number >>
         tag!("#") >>
@@ -85,7 +121,7 @@ named!(repeat<&str, Repeat>, alt!(
         (Repeat{ repeat: Some(n), term: c })
     ) |
     map!(comparison, |v| Repeat{ repeat: None, term: v })
-));
+)));
 #[derive(Debug)]
 pub struct Repeat {
     pub repeat: Option<i64>, // ( integer "#" )?
@@ -104,17 +140,18 @@ impl Evaluable for Repeat {
                     strings.push(s);
                     values.push(v);
                 }
-                Ok((strings.join(", "), EvaluatedValue::IntSlice(values.iter().map(|v| v.as_i64()).collect())))
+                let result: Result<Vec<i64>, String> = values.iter().map(|v| v.as_i64()).collect();
+                Ok((strings.join(", "), IntSlice(result?)))
             }
         }
     }
 }
 
-named!(comparison<&str, Comparison>, do_parse!(
+named!(comparison<&str, Comparison>, sp!(do_parse!(
     l: addsub >>
     r: opt!(tuple!(compareOp, addsub)) >>
     (Comparison{left: l, right: r})
-));
+)));
 #[derive(Debug)]
 pub struct Comparison {
     pub left: AddSub,                       // ...
@@ -137,11 +174,11 @@ impl Evaluable for Comparison {
     }
 }
 
-named!(addsub<&str, AddSub>, do_parse!(
+named!(addsub<&str, AddSub>, sp!(do_parse!(
     l: muldiv >>
     r: many0!(tuple!(addsubOp, muldiv)) >>
     (AddSub{left: l, right: r})
-));
+)));
 #[derive(Debug)]
 pub struct AddSub {
     pub left: MulDiv,                   // ...
@@ -155,17 +192,17 @@ impl Evaluable for AddSub {
             let (rs, r) = elem.1.eval()?;
 
             ss = format!("{}{}{}", ss, elem.0, rs);
-            l = elem.0.apply(l, r);
+            l = elem.0.apply(l, r)?;
         }
         Ok((ss, l))
     }
 }
 
-named!(muldiv<&str, MulDiv>, do_parse!(
+named!(muldiv<&str, MulDiv>, sp!(do_parse!(
     l: sum >>
     r: many0!(tuple!(muldivOp, sum)) >>
     (MulDiv{left: l, right: r})
-));
+)));
 #[derive(Debug)]
 pub struct MulDiv {
     pub left: Sum,                   // ...
@@ -179,17 +216,17 @@ impl Evaluable for MulDiv {
             let (rs, r) = elem.1.eval()?;
 
             ss = format!("{}{}{}", ss, elem.0, rs);
-            l = elem.0.apply(l, r);
+            l = elem.0.apply(l, r)?;
         }
         Ok((ss, l))
     }
 }
 
-named!(sum<&str, Sum>, do_parse!(
+named!(sum<&str, Sum>, sp!(do_parse!(
     s: alt!(value!(true, tag!("s")) | value!(false)) >>
     t: dicemod >>
     (Sum{is_sum: s, term: t})
-));
+)));
 #[derive(Debug)]
 pub struct Sum {
     pub is_sum: bool,  // ( "s" )?
@@ -199,18 +236,18 @@ impl Evaluable for Sum {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         let (s, v) = self.term.eval()?;
         if self.is_sum {
-            Ok((format!("s{}", s), EvaluatedValue::Integer(v.as_i64())))
+            Ok((format!("s{}", s), Integer(v.as_i64()?)))
         } else {
             Ok((s, v))
         }
     }
 }
 
-named!(dicemod<&str, DiceMod>, do_parse!(
+named!(dicemod<&str, DiceMod>, sp!(do_parse!(
     r: diceroll >>
     o: opt!(tuple!(dicemodOp, value)) >>
     (DiceMod{roll: r, op: o})
-));
+)));
 #[derive(Debug)]
 pub struct DiceMod {
     pub roll: DiceRoll,             // ...
@@ -225,13 +262,13 @@ impl Evaluable for DiceMod {
                     DiceRoll::NoRoll(_) => {
                         let l = self.roll.eval()?;
                         let (rs, rv) = r.eval()?;
-                        let (_, v) = op.apply(l.1, rv);
+                        let (_, v) = op.apply(l.1, rv)?;
                         Ok((format!("{}{}{}", l.0, op, rs), v))
                     }
                     DiceRoll::Roll{..} => {
                         let (s, l) = self.roll._eval()?;
                         let (rs, rv) = r.eval()?;
-                        let (vs, v) = op.apply(l, rv);
+                        let (vs, v) = op.apply(l, rv)?;
                         Ok((format!("{}{}{}:{}", s, op, rs, vs), v))
                     }
                 }
@@ -240,14 +277,14 @@ impl Evaluable for DiceMod {
     }
 }
 
-named!(explode<&str, Explode>, alt!(
+named!(explode<&str, Explode>, sp!(alt!(
     do_parse!(
         tag!("!") >>
         n: number >>
         (Explode::Target(n))
     ) |
     value!(Explode::Default, tag!("!"))
-));
+)));
 #[derive(Debug)]
 pub enum Explode {
     Default,
@@ -262,7 +299,7 @@ impl Explode {
     }
 }
 
-named!(diceroll<&str, DiceRoll>, alt!(
+named!(diceroll<&str, DiceRoll>, sp!(alt!(
     do_parse!(
         c: opt!(value) >>
         tag!("d") >>
@@ -271,7 +308,7 @@ named!(diceroll<&str, DiceRoll>, alt!(
         (DiceRoll::Roll{count: c, sides: s, explode: e})
     ) |
     map!(value, |v| DiceRoll::NoRoll(v))
-));
+)));
 #[derive(Debug)]
 pub enum DiceRoll {
     NoRoll(Value), // ...
@@ -286,7 +323,7 @@ impl Evaluable for DiceRoll {
         let (s, r) = self._eval()?;
         match self {
             DiceRoll::NoRoll(_) => return Ok((s, r)),
-            DiceRoll::Roll{..} => return Ok((format!("{}:{:?}", s, r.as_int_slice()), r))
+            DiceRoll::Roll{..} => return Ok((format!("{}:{:?}", s, r.as_int_slice()?), r))
         }
     }
 }
@@ -303,7 +340,7 @@ impl DiceRoll {
                 let (cs, c) = match cv {
                     Some(v) => {
                         let (vs, vv) = v.eval()?;
-                        let count = vv.as_i64();
+                        let count = vv.as_i64()?;
                         if count > 1000 {
                             return Err("too many dice".to_string());
                         }
@@ -315,15 +352,15 @@ impl DiceRoll {
                     Some(v) => {
                         let (vs, vv) = v.eval()?;
                         let opts: Vec<i64> = match vv {
-                            EvaluatedValue::Integer(i) => {
+                            Integer(i) => {
                                 if i > 1000 {
                                     return Err("dice too large".to_string());
                                 }
                                 (1..).take(i as usize).collect()
                             }
-                            EvaluatedValue::IntSlice(s) => s,
-                            EvaluatedValue::Bool(b) => return Err(format!("cannot roll a d{}", b)),
-                            EvaluatedValue::BoolSlice(b) => return Err(format!("cannot roll a d{:?}", b)),
+                            IntSlice(s) => s,
+                            Bool(b) => return Err(format!("cannot roll a d{}", b)),
+                            BoolSlice(b) => return Err(format!("cannot roll a d{:?}", b)),
                         };
                         (vs, opts)
                     }
@@ -361,20 +398,20 @@ impl DiceRoll {
                 };
                 Ok((
                     format!("{}d{}{}", cs, ss, exp_str),
-                    EvaluatedValue::IntSlice(results),
+                    IntSlice(results),
                 ))
             }
         }
     }
 }
 
-named!(value<&str, Value>, alt!(
+named!(value<&str, Value>, sp!(alt!(
     map!(number, |v| Value::Integer(v)) |
     map!(delimited!(tag!("("), expression, tag!(")")), |v| Value::Sub(Box::new(v))) |
     map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| Value::Slice(v)) |
     value!(Value::Fate, tag!("F")) |
     value!(Value::Hundred, tag!("%"))
-));
+)));
 #[derive(Debug)]
 pub enum Value {
     Integer(i64),           // ...
@@ -386,7 +423,7 @@ pub enum Value {
 impl Evaluable for Value {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         match self {
-            Value::Integer(i) => Ok((format!("{}", i), EvaluatedValue::Integer(*i))),
+            Value::Integer(i) => Ok((format!("{}", i), Integer(*i))),
             Value::Sub(expr) => {
                 let (es, ev) = expr.eval()?;
                 Ok((format!("({})", es), ev))
@@ -397,13 +434,13 @@ impl Evaluable for Value {
                     Err(e) => Err(e),
                     Ok(v) => {
                         let strs: Vec<String> = v.iter().map(|&(ref s, _)| s.clone()).collect();
-                        let vals: Vec<i64> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
-                        Ok((format!("[{}]", strs.join(", ")), EvaluatedValue::IntSlice(vals)))
+                        let vals: Result<Vec<i64>, String> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
+                        Ok((format!("[{}]", strs.join(", ")), IntSlice(vals?)))
                     }
                 }
             }
-            Value::Fate => Ok(("F".to_string(), EvaluatedValue::IntSlice(vec![-1, 0, 1]))),
-            Value::Hundred => Ok(("%".to_string(), EvaluatedValue::Integer(100))),
+            Value::Fate => Ok(("F".to_string(), IntSlice(vec![-1, 0, 1]))),
+            Value::Hundred => Ok(("%".to_string(), Integer(100))),
         }
     }
 }
@@ -415,14 +452,14 @@ pub enum AddSubOp {
     Sub, // -
 }
 impl AddSubOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> EvaluatedValue {
-        let l = left.as_i64();
-        let r = right.as_i64();
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<EvaluatedValue, String> {
+        let l = left.as_i64()?;
+        let r = right.as_i64()?;
         let result = match self {
             AddSubOp::Add => l + r,
             AddSubOp::Sub => l - r,
         };
-        EvaluatedValue::Integer(result)
+        Ok(Integer(result))
     }
 }
 impl Display for AddSubOp {
@@ -441,14 +478,14 @@ pub enum MulDivOp {
     Div, // /
 }
 impl MulDivOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> EvaluatedValue {
-        let l = left.as_i64();
-        let r = right.as_i64();
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<EvaluatedValue, String> {
+        let l = left.as_i64()?;
+        let r = right.as_i64()?;
         let result = match self {
             MulDivOp::Mul => l * r,
             MulDivOp::Div => l / r,
         };
-        EvaluatedValue::Integer(result)
+        Ok(Integer(result))
     }
 }
 impl Display for MulDivOp {
@@ -460,14 +497,14 @@ impl Display for MulDivOp {
     }
 }
 
-named!(compareOp<&str, CompareOp>, alt!(
-    value!(CompareOp::Less, tag!("<")) |
+named!(compareOp<&str, CompareOp>, ws!(alt!(
     value!(CompareOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
-    value!(CompareOp::Greater, tag!(">")) |
+    value!(CompareOp::Less, tag!("<")) |
     value!(CompareOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
+    value!(CompareOp::Greater, tag!(">")) |
     value!(CompareOp::Equal, alt!(tag!("==") | tag!("="))) |
     value!(CompareOp::Unequal, alt!(tag!("!=") | tag!("<>")))
-));
+)));
 #[derive(Debug)]
 pub enum CompareOp {
     Less,      // <
@@ -489,10 +526,14 @@ impl CompareOp {
         }
     }
     fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Option<String>, EvaluatedValue), String> {
-        let l = left.as_i64();
+        let l = match left {
+            Integer(v) => Ok(v),
+            IntSlice(v) => IntSlice(v).as_i64(),
+            v => Err(format!("cannot compare {} {} {}", v, self, right)),
+        }?;
         match right {
-            EvaluatedValue::Integer(v) => Ok((None, EvaluatedValue::Bool(self.compare(l, v)))),
-            EvaluatedValue::IntSlice(s) => {
+            Integer(r) => Ok((None, Bool(self.compare(l, r)))),
+            IntSlice(s) => {
                 let (strings, values): (Vec<String>, Vec<bool>) = s.iter().map(|r| {
                     if self.compare(l, *r) {
                         (format!("{}{}{}", GREEN, *r, RESET), true)
@@ -500,10 +541,9 @@ impl CompareOp {
                         (format!("{}{}{}", RED, *r, RESET), false)
                     }
                 }).unzip();
-                Ok((Some(format!("[{}]", strings.join(", "))), EvaluatedValue::BoolSlice(values)))
+                Ok((Some(format!("[{}]", strings.join(", "))), BoolSlice(values)))
             }
-            EvaluatedValue::Bool(b) => Err(format!("cannot compare {} {} {}", l, self, b)),
-            EvaluatedValue::BoolSlice(s) => Err(format!("cannot compare {} {} {:?}", l, self, s))
+            v => Err(format!("cannot compare {} {} {}", l, self, v)),
         }
     }
 }
@@ -546,10 +586,10 @@ fn format_arrays(ac: &str, aa: &[i64], bc: &str, ba: &[i64]) -> String {
 }
 
 impl ModOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> (String, EvaluatedValue) {
-        let mut l = left.as_int_slice();
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(String, EvaluatedValue), String> {
+        let mut l = left.as_int_slice()?;
         l.sort();
-        let r = right.as_i64() as usize;
+        let r = right.as_i64()? as usize;
         let (s, result) = match self {
             ModOp::DropLowest => (format_arrays(RED, &l[..r], YELLOW, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
@@ -562,7 +602,7 @@ impl ModOp {
                 (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[l.len() - r..])
             }
         };
-        (s, EvaluatedValue::IntSlice(result.to_vec()))
+        Ok((s, IntSlice(result.to_vec())))
     }
 }
 impl Display for ModOp {
@@ -580,8 +620,6 @@ named!(number<&str, i64>,
     map_res!(take_while!(is_digit), |s: &str| s.parse::<i64>())
 );
 
-// Low-level helpers
 fn is_digit(c: char) -> bool {
-    //nom::is_digit(c as u8)
     '0' <= c && c <= '9'
 }
