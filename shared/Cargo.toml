@@ -7,4 +7,4 @@ authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 crate-type = ["dylib"]
 
 [dependencies]
-rusqlite = "0.16.0"
+rusqlite = { version = "0.16.0", features = ["bundled"] }

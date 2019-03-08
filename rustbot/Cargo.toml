@@ -9,6 +9,6 @@ irc = "0.13.6"
 toml = "0.4.10"
 serde = "1.0.87"
 serde_derive = "1.0.87"
-rusqlite = "0.16.0"
+rusqlite = { version = "0.16.0", features = ["bundled"] }
 migrant_lib = { version = "0.23.0", features = ["d-sqlite"] }
 shared = { path = "../shared" }
