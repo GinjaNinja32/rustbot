@@ -59,10 +59,12 @@ fn exec(ctx: &mut types::Context, args: &str) {
 }
 
 fn query(ctx: &mut types::Context, args: &str) {
-    let result: Result<Vec<String>, rusqlite::Error> =
+    let result: Result<(String, Vec<String>), rusqlite::Error> =
         ctx.bot().sql().prepare(args).and_then(|mut stmt| {
+            let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+            let colstr = format!("({})", cols.join(", "));
             stmt.query_map(NO_PARAMS, |row| {
-                let cols: Vec<String> = (0..row.column_count())
+                let vals: Vec<String> = (0..row.column_count())
                     .map(|i| match row.get_raw(i) {
                         Null => "null".to_string(),
                         Integer(i) => format!("{}", i),
@@ -71,12 +73,15 @@ fn query(ctx: &mut types::Context, args: &str) {
                         Blob(b) => format!("{:?}", b),
                     })
                     .collect();
-                format!("[{}]", cols.join(", "))
+                format!("({})", vals.join(", "))
             })
-            .and_then(|rows| rows.collect())
+            .and_then(|rows| {
+                let r: Result<Vec<String>, rusqlite::Error> = rows.collect();
+                Ok((colstr, r?))
+            })
         });
     match result {
-        Ok(rows) => ctx.reply(&rows.join(", ")),
+        Ok((cols, rows)) => ctx.reply(&format!("{}: {}", cols, &rows.join(", "))),
         Err(e) => ctx.reply(&format!("{}", e)),
     }
 }
