@@ -11,6 +11,8 @@ use std::rc::Rc;
 pub fn get_meta() -> types::Meta {
     let mut meta = types::Meta::new();
     meta.commandrc("raw", Rc::new(wrap(raw)));
+    meta.commandrc("join", Rc::new(wrap(join)));
+    meta.commandrc("part", Rc::new(wrap(part)));
     meta.commandrc("e", Rc::new(wrap(exec)));
     meta.commandrc("q", Rc::new(wrap(query)));
     meta.command("whoami", whoami);
@@ -29,6 +31,24 @@ fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &
 
 fn raw(ctx: &mut types::Context, args: &str) {
     ctx.bot().send_raw(args);
+}
+
+fn join(ctx: &mut types::Context, args: &str) {
+    if let Err(e) = ctx.bot().sql().execute("INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING", vec![args]) {
+        ctx.reply(&format!("join failed: {}", e));
+        return;
+    }
+    ctx.bot().send_raw(&format!("JOIN {}", args));
+    ctx.reply("done");
+}
+
+fn part(ctx: &mut types::Context, args: &str) {
+    if let Err(e) = ctx.bot().sql().execute("DELETE FROM channels WHERE channel = ?", vec![args]) {
+        ctx.reply(&format!("part failed: {}", e));
+        return;
+    }
+    ctx.bot().send_raw(&format!("part {}", args));
+    ctx.reply("done");
 }
 
 fn exec(ctx: &mut types::Context, args: &str) {
