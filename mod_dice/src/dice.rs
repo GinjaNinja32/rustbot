@@ -47,7 +47,7 @@ enum EvaluatedValue {
     BoolSlice(Vec<bool>),
 }
 impl Display for EvaluatedValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(),fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             Integer(i) => write!(f, "{}", i),
             IntSlice(s) => {
@@ -65,7 +65,7 @@ impl Display for EvaluatedValue {
 impl EvaluatedValue {
     fn as_i64(&self) -> Result<i64, String> {
         match self {
-            Integer(i) =>Ok(*i),
+            Integer(i) => Ok(*i),
             IntSlice(s) => Ok(s.iter().fold(0, |x, y| x + y)),
             Bool(true) => Ok(1),
             Bool(false) => Ok(0),
@@ -167,7 +167,7 @@ impl Evaluable for Comparison {
                 let (os, v) = op.apply(l.1, r.1)?;
                 match os {
                     None => Ok((format!("{}{}{}", l.0, op, r.0), v)),
-                    Some(s) => Ok((format!("{}{}{}={}", l.0, op, r.0, s), v))
+                    Some(s) => Ok((format!("{}{}{}={}", l.0, op, r.0, s), v)),
                 }
             }
         }
@@ -257,22 +257,20 @@ impl Evaluable for DiceMod {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         match &self.op {
             None => return self.roll.eval(),
-            Some((op, r)) => {
-                match self.roll {
-                    DiceRoll::NoRoll(_) => {
-                        let l = self.roll.eval()?;
-                        let (rs, rv) = r.eval()?;
-                        let (_, v) = op.apply(l.1, rv)?;
-                        Ok((format!("{}{}{}", l.0, op, rs), v))
-                    }
-                    DiceRoll::Roll{..} => {
-                        let (s, l) = self.roll._eval()?;
-                        let (rs, rv) = r.eval()?;
-                        let (vs, v) = op.apply(l, rv)?;
-                        Ok((format!("{}{}{}:{}", s, op, rs, vs), v))
-                    }
+            Some((op, r)) => match self.roll {
+                DiceRoll::NoRoll(_) => {
+                    let l = self.roll.eval()?;
+                    let (rs, rv) = r.eval()?;
+                    let (_, v) = op.apply(l.1, rv)?;
+                    Ok((format!("{}{}{}", l.0, op, rs), v))
                 }
-            }
+                DiceRoll::Roll { .. } => {
+                    let (s, l) = self.roll._eval()?;
+                    let (rs, rv) = r.eval()?;
+                    let (vs, v) = op.apply(l, rv)?;
+                    Ok((format!("{}{}{}:{}", s, op, rs, vs), v))
+                }
+            },
         }
     }
 }
@@ -323,7 +321,7 @@ impl Evaluable for DiceRoll {
         let (s, r) = self._eval()?;
         match self {
             DiceRoll::NoRoll(_) => return Ok((s, r)),
-            DiceRoll::Roll{..} => return Ok((format!("{}:{:?}", s, r.as_int_slice()?), r))
+            DiceRoll::Roll { .. } => return Ok((format!("{}:{:?}", s, r.as_int_slice()?), r)),
         }
     }
 }
@@ -378,17 +376,17 @@ impl DiceRoll {
                 let results = iter::repeat_with(|| *s.choose(&mut rng).unwrap())
                     .take_while(|&roll| {
                         if n <= 0 {
-                            return false
+                            return false;
                         }
                         match target {
-                            None => { n -= 1 }
+                            None => n -= 1,
                             Some(t) => {
                                 if roll < t {
                                     n -= 1
                                 }
                             }
                         };
-                        return true
+                        return true;
                     })
                     .collect();
 
@@ -396,10 +394,7 @@ impl DiceRoll {
                     None => "".to_string(),
                     Some(exp) => exp.to_string(),
                 };
-                Ok((
-                    format!("{}d{}{}", cs, ss, exp_str),
-                    IntSlice(results),
-                ))
+                Ok((format!("{}d{}{}", cs, ss, exp_str), IntSlice(results)))
             }
         }
     }
@@ -429,12 +424,14 @@ impl Evaluable for Value {
                 Ok((format!("({})", es), ev))
             }
             Value::Slice(s) => {
-                let r: Result<Vec<(String, EvaluatedValue)>, _> = s.iter().map(|v| v.eval()).collect();
+                let r: Result<Vec<(String, EvaluatedValue)>, _> =
+                    s.iter().map(|v| v.eval()).collect();
                 match r {
                     Err(e) => Err(e),
                     Ok(v) => {
                         let strs: Vec<String> = v.iter().map(|&(ref s, _)| s.clone()).collect();
-                        let vals: Result<Vec<i64>, String> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
+                        let vals: Result<Vec<i64>, String> =
+                            v.iter().map(|&(_, ref v)| v.as_i64()).collect();
                         Ok((format!("[{}]", strs.join(", ")), IntSlice(vals?)))
                     }
                 }
@@ -525,7 +522,11 @@ impl CompareOp {
             CompareOp::Unequal => l != r,
         }
     }
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Option<String>, EvaluatedValue), String> {
+    fn apply(
+        &self,
+        left: EvaluatedValue,
+        right: EvaluatedValue,
+    ) -> Result<(Option<String>, EvaluatedValue), String> {
         let l = match left {
             Integer(v) => Ok(v),
             IntSlice(v) => IntSlice(v).as_i64(),
@@ -534,13 +535,16 @@ impl CompareOp {
         match right {
             Integer(r) => Ok((None, Bool(self.compare(l, r)))),
             IntSlice(s) => {
-                let (strings, values): (Vec<String>, Vec<bool>) = s.iter().map(|r| {
-                    if self.compare(l, *r) {
-                        (format!("{}{}{}", GREEN, *r, RESET), true)
-                    } else {
-                        (format!("{}{}{}", RED, *r, RESET), false)
-                    }
-                }).unzip();
+                let (strings, values): (Vec<String>, Vec<bool>) = s
+                    .iter()
+                    .map(|r| {
+                        if self.compare(l, *r) {
+                            (format!("{}{}{}", GREEN, *r, RESET), true)
+                        } else {
+                            (format!("{}{}{}", RED, *r, RESET), false)
+                        }
+                    })
+                    .unzip();
                 Ok((Some(format!("[{}]", strings.join(", "))), BoolSlice(values)))
             }
             v => Err(format!("cannot compare {} {} {}", l, self, v)),
@@ -574,7 +578,7 @@ pub enum ModOp {
     KeepHighest, // H
 }
 
-const RED : &str = "\x0304";
+const RED: &str = "\x0304";
 const YELLOW: &str = "\x0308";
 const GREEN: &str = "\x0309";
 const RESET: &str = "\x03\x02\x02";
@@ -582,11 +586,15 @@ const RESET: &str = "\x03\x02\x02";
 fn format_arrays(ac: &str, aa: &[i64], bc: &str, ba: &[i64]) -> String {
     let a: Vec<String> = aa.iter().map(|v| format!("{}{}{}", ac, v, RESET)).collect();
     let b: Vec<String> = ba.iter().map(|v| format!("{}{}{}", bc, v, RESET)).collect();
-    return format!("[{}, {}]", a.join(", "), b.join(", "))
+    return format!("[{}, {}]", a.join(", "), b.join(", "));
 }
 
 impl ModOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(String, EvaluatedValue), String> {
+    fn apply(
+        &self,
+        left: EvaluatedValue,
+        right: EvaluatedValue,
+    ) -> Result<(String, EvaluatedValue), String> {
         let mut l = left.as_int_slice()?;
         l.sort();
         let r = right.as_i64()? as usize;
@@ -594,12 +602,18 @@ impl ModOp {
             ModOp::DropLowest => (format_arrays(RED, &l[..r], YELLOW, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
                 let i = l.len() - r;
-                (format_arrays(YELLOW, &l[..i], RED, &l[i..]), &l[..l.len() - r])
+                (
+                    format_arrays(YELLOW, &l[..i], RED, &l[i..]),
+                    &l[..l.len() - r],
+                )
             }
             ModOp::KeepLowest => (format_arrays(YELLOW, &l[..r], RED, &l[r..]), &l[..r]),
             ModOp::KeepHighest => {
                 let i = l.len() - r;
-                (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[l.len() - r..])
+                (
+                    format_arrays(RED, &l[..i], YELLOW, &l[i..]),
+                    &l[l.len() - r..],
+                )
             }
         };
         Ok((s, IntSlice(result.to_vec())))

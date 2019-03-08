@@ -34,7 +34,10 @@ fn raw(ctx: &mut types::Context, args: &str) {
 }
 
 fn join(ctx: &mut types::Context, args: &str) {
-    if let Err(e) = ctx.bot().sql().execute("INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING", vec![args]) {
+    if let Err(e) = ctx.bot().sql().execute(
+        "INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING",
+        vec![args],
+    ) {
         ctx.reply(&format!("join failed: {}", e));
         return;
     }
@@ -43,7 +46,11 @@ fn join(ctx: &mut types::Context, args: &str) {
 }
 
 fn part(ctx: &mut types::Context, args: &str) {
-    if let Err(e) = ctx.bot().sql().execute("DELETE FROM channels WHERE channel = ?", vec![args]) {
+    if let Err(e) = ctx
+        .bot()
+        .sql()
+        .execute("DELETE FROM channels WHERE channel = ?", vec![args])
+    {
         ctx.reply(&format!("part failed: {}", e));
         return;
     }

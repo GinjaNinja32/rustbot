@@ -1,6 +1,6 @@
 use db;
-use irc::client::prelude::*;
 use irc::client::prelude as irc;
+use irc::client::prelude::*;
 use libloading::{Library, Symbol};
 use rusqlite::{Connection, NO_PARAMS};
 use shared::types;
@@ -243,18 +243,28 @@ impl<'a> types::Context for Context<'a> {
 
 pub fn start() {
     let db = db::open().unwrap();
-    let mut config: irc::Config = db.query_row("SELECT nick, user, real, server, port, ssl FROM config", NO_PARAMS, |row| {
-        irc::Config{
-            nickname: row.get(0),
-            username: row.get(1),
-            realname: row.get(2),
-            server: row.get(3),
-            port: row.get(4),
-            use_ssl: row.get(5),
-            ..irc::Config::default()
-        }
-    }).unwrap();
-    config.channels = db.prepare("SELECT channel FROM channels").and_then(|mut stmt| stmt.query_map(NO_PARAMS, |row| { row.get(0) }).and_then(|c| c.collect())).unwrap();
+    let mut config: irc::Config = db
+        .query_row(
+            "SELECT nick, user, real, server, port, ssl FROM config",
+            NO_PARAMS,
+            |row| irc::Config {
+                nickname: row.get(0),
+                username: row.get(1),
+                realname: row.get(2),
+                server: row.get(3),
+                port: row.get(4),
+                use_ssl: row.get(5),
+                ..irc::Config::default()
+            },
+        )
+        .unwrap();
+    config.channels = db
+        .prepare("SELECT channel FROM channels")
+        .and_then(|mut stmt| {
+            stmt.query_map(NO_PARAMS, |row| row.get(0))
+                .and_then(|c| c.collect())
+        })
+        .unwrap();
     let client = Rc::new(IrcClient::from_config(config).unwrap());
     let b = &mut IRCBot {
         client: Rc::clone(&client),
