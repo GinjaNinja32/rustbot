@@ -2,16 +2,16 @@ extern crate shared;
 
 use shared::types;
 use std::process::Command;
-use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
     let mut meta = types::Meta::new();
-    meta.commandrc("drop", Rc::new(wrap(drop)));
-    meta.commandrc("load", Rc::new(wrap(load)));
-    meta.commandrc("reload", Rc::new(wrap(reload)));
-    meta.commandrc("recompile", Rc::new(wrap(recompile)));
+    meta.commandrc("drop", Arc::new(wrap(drop)));
+    meta.commandrc("load", Arc::new(wrap(load)));
+    meta.commandrc("reload", Arc::new(wrap(reload)));
+    meta.commandrc("recompile", Arc::new(wrap(recompile)));
     meta
 }
 

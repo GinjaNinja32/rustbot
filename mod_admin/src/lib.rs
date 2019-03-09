@@ -5,16 +5,16 @@ use rusqlite::types::ValueRef::*;
 use rusqlite::NO_PARAMS;
 use shared::types;
 use shared::types::Source::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[no_mangle]
 pub fn get_meta() -> types::Meta {
     let mut meta = types::Meta::new();
-    meta.commandrc("raw", Rc::new(wrap(raw)));
-    meta.commandrc("join", Rc::new(wrap(join)));
-    meta.commandrc("part", Rc::new(wrap(part)));
-    meta.commandrc("e", Rc::new(wrap(exec)));
-    meta.commandrc("q", Rc::new(wrap(query)));
+    meta.commandrc("raw", Arc::new(wrap(raw)));
+    meta.commandrc("join", Arc::new(wrap(join)));
+    meta.commandrc("part", Arc::new(wrap(part)));
+    meta.commandrc("e", Arc::new(wrap(exec)));
+    meta.commandrc("q", Arc::new(wrap(query)));
     meta.command("whoami", whoami);
     meta
 }
@@ -30,44 +30,56 @@ fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &
 }
 
 fn raw(ctx: &mut types::Context, args: &str) {
-    ctx.bot().send_raw(args);
+    ctx.irc_send_raw(args);
 }
 
 fn join(ctx: &mut types::Context, args: &str) {
-    if let Err(e) = ctx.bot().sql().execute(
-        "INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING",
-        vec![args],
-    ) {
+    let result = {
+        let db = ctx.bot().sql().lock().unwrap();
+        let r = db.execute(
+            "INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING",
+            vec![args],
+        );
+        r
+    };
+    if let Err(e) = result {
         ctx.reply(&format!("join failed: {}", e));
         return;
     }
-    ctx.bot().send_raw(&format!("JOIN {}", args));
+    ctx.irc_send_raw(&format!("JOIN {}", args));
     ctx.reply("done");
 }
 
 fn part(ctx: &mut types::Context, args: &str) {
-    if let Err(e) = ctx
-        .bot()
-        .sql()
-        .execute("DELETE FROM channels WHERE channel = ?", vec![args])
-    {
+    let result = {
+        let db = ctx.bot().sql().lock().unwrap();
+        let r = db.execute("DELETE FROM channels WHERE channel = ?", vec![args]);
+        r
+    };
+    if let Err(e) = result {
         ctx.reply(&format!("part failed: {}", e));
         return;
     }
-    ctx.bot().send_raw(&format!("part {}", args));
+    ctx.irc_send_raw(&format!("part {}", args));
     ctx.reply("done");
 }
 
 fn exec(ctx: &mut types::Context, args: &str) {
-    match ctx.bot().sql().execute(args, NO_PARAMS) {
+    let result = {
+        let db = ctx.bot().sql().lock().unwrap();
+        let r = db.execute(args, NO_PARAMS);
+        r
+    };
+    match result {
         Ok(n) => ctx.reply(&format!("{} rows changed", n)),
         Err(e) => ctx.reply(&format!("{}", e)),
     }
 }
 
 fn query(ctx: &mut types::Context, args: &str) {
-    let result: Result<(String, Vec<String>), rusqlite::Error> =
-        ctx.bot().sql().prepare(args).and_then(|mut stmt| {
+    let result: Result<(String, Vec<String>), rusqlite::Error> = {
+        let db = ctx.bot().sql().lock().unwrap();
+        let r = db.prepare(args).and_then(|mut stmt| {
             let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
             let colstr = format!("({})", cols.join(", "));
             stmt.query_map(NO_PARAMS, |row| {
@@ -87,6 +99,8 @@ fn query(ctx: &mut types::Context, args: &str) {
                 Ok((colstr, r?))
             })
         });
+        r
+    };
     match result {
         Ok((cols, rows)) => ctx.reply(&format!("{}: {}", cols, &rows.join(", "))),
         Err(e) => ctx.reply(&format!("{}", e)),
@@ -96,10 +110,19 @@ fn query(ctx: &mut types::Context, args: &str) {
 fn whoami(ctx: &mut types::Context, _: &str) {
     match ctx.get_source() {
         None => ctx.reply(&format!("I don't know who you are")),
-        Some(Server(s)) => ctx.reply(&format!("You are {}", s)),
-        Some(User { nick, user, host }) => {
-            ctx.reply(&format!("You are {}!{}@{}", nick, user, host))
-        }
+        Some(IRCServer { config, host, .. }) => ctx.reply(&format!("You are {}:{}", config, host)),
+        Some(IRCUser {
+            config,
+            nick,
+            user,
+            host,
+            ..
+        }) => ctx.reply(&format!("You are {}:{}!{}@{}", config, nick, user, host)),
+        Some(DiscordUser { guild, user, .. }) => ctx.reply(&format!(
+            "You are {:?}:{}",
+            guild.map(|g| *g.as_u64()),
+            user
+        )),
     }
     ctx.reply(&format!("Flags: {}", ctx.perms()));
 }
