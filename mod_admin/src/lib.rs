@@ -34,11 +34,18 @@ fn raw(ctx: &mut types::Context, args: &str) {
 }
 
 fn join(ctx: &mut types::Context, args: &str) {
+    let cfg_id = {
+        match ctx.get_source() {
+            Some(IRCUser { config, .. }) => config,
+            Some(IRCServer { config, .. }) => config,
+            _ => return,
+        }
+    };
     let result = {
         let db = ctx.bot().sql().lock().unwrap();
         let r = db.execute(
-            "INSERT INTO channels (channel) VALUES (?) ON CONFLICT (channel) DO NOTHING",
-            vec![args],
+            "INSERT INTO irc_channels (channel, config_id) VALUES (?, ?) ON CONFLICT (channel, config_id) DO NOTHING",
+            vec![args, cfg_id.as_str()],
         );
         r
     };
@@ -51,9 +58,19 @@ fn join(ctx: &mut types::Context, args: &str) {
 }
 
 fn part(ctx: &mut types::Context, args: &str) {
+    let cfg_id = {
+        match ctx.get_source() {
+            Some(IRCUser { config, .. }) => config,
+            Some(IRCServer { config, .. }) => config,
+            _ => return,
+        }
+    };
     let result = {
         let db = ctx.bot().sql().lock().unwrap();
-        let r = db.execute("DELETE FROM channels WHERE channel = ?", vec![args]);
+        let r = db.execute(
+            "DELETE FROM irc_channels WHERE channel = ? AND config_id = ?",
+            vec![args, cfg_id.as_str()],
+        );
         r
     };
     if let Err(e) = result {
