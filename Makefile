@@ -1,15 +1,3 @@
-update:
-	# Updates Cargo.toml to reflect module status
-	truncate --size=0 Cargo.toml
-	echo '[workspace]' >> Cargo.toml
-	echo 'members = [' >> Cargo.toml
-	echo '"rustbot",' >> Cargo.toml
-	echo '"shared",' >> Cargo.toml
-	find mod_* -mindepth 1 -maxdepth 1 -name Cargo.toml \
-		| sed -e 's|^./||g' -e 's|/Cargo.toml$$||g' -e 's/.*/"\0",/' \
-		| sort \
-		>> Cargo.toml
-	echo ']' >> Cargo.toml
 
 define cargotoml
 [package]
