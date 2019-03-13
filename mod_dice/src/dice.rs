@@ -149,7 +149,7 @@ impl Evaluable for Repeat {
 
 named!(comparison<&str, Comparison>, sp!(do_parse!(
     l: addsub >>
-    r: opt!(tuple!(compareOp, addsub)) >>
+    r: opt!(tuple!(compare_op, addsub)) >>
     (Comparison{left: l, right: r})
 )));
 #[derive(Debug)]
@@ -176,7 +176,7 @@ impl Evaluable for Comparison {
 
 named!(addsub<&str, AddSub>, sp!(do_parse!(
     l: muldiv >>
-    r: many0!(tuple!(addsubOp, muldiv)) >>
+    r: many0!(tuple!(addsub_op, muldiv)) >>
     (AddSub{left: l, right: r})
 )));
 #[derive(Debug)]
@@ -200,7 +200,7 @@ impl Evaluable for AddSub {
 
 named!(muldiv<&str, MulDiv>, sp!(do_parse!(
     l: sum >>
-    r: many0!(tuple!(muldivOp, sum)) >>
+    r: many0!(tuple!(muldiv_op, sum)) >>
     (MulDiv{left: l, right: r})
 )));
 #[derive(Debug)]
@@ -245,7 +245,7 @@ impl Evaluable for Sum {
 
 named!(dicemod<&str, DiceMod>, sp!(do_parse!(
     r: diceroll >>
-    o: opt!(tuple!(dicemodOp, value)) >>
+    o: opt!(tuple!(dicemod_op, value)) >>
     (DiceMod{roll: r, op: o})
 )));
 #[derive(Debug)]
@@ -442,7 +442,7 @@ impl Evaluable for Value {
     }
 }
 
-named!(addsubOp<&str, AddSubOp>, alt!(value!(AddSubOp::Add, tag!("+")) | value!(AddSubOp::Sub, tag!("-"))));
+named!(addsub_op<&str, AddSubOp>, alt!(value!(AddSubOp::Add, tag!("+")) | value!(AddSubOp::Sub, tag!("-"))));
 #[derive(Debug)]
 pub enum AddSubOp {
     Add, // +
@@ -468,7 +468,7 @@ impl Display for AddSubOp {
     }
 }
 
-named!(muldivOp<&str, MulDivOp>, alt!(value!(MulDivOp::Mul, tag!("*")) | value!(MulDivOp::Div, tag!("/"))));
+named!(muldiv_op<&str, MulDivOp>, alt!(value!(MulDivOp::Mul, tag!("*")) | value!(MulDivOp::Div, tag!("/"))));
 #[derive(Debug)]
 pub enum MulDivOp {
     Mul, // *
@@ -494,7 +494,7 @@ impl Display for MulDivOp {
     }
 }
 
-named!(compareOp<&str, CompareOp>, sp!(alt!(
+named!(compare_op<&str, CompareOp>, sp!(alt!(
     value!(CompareOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
     value!(CompareOp::Less, tag!("<")) |
     value!(CompareOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
@@ -564,7 +564,7 @@ impl Display for CompareOp {
     }
 }
 
-named!(dicemodOp<&str, ModOp>, alt!(
+named!(dicemod_op<&str, ModOp>, alt!(
     value!(ModOp::DropLowest, tag!("l")) |
     value!(ModOp::DropHighest, tag!("h")) |
     value!(ModOp::KeepLowest, tag!("L")) |
