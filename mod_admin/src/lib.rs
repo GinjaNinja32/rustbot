@@ -138,7 +138,7 @@ fn whoami(ctx: &mut types::Context, _: &str) {
         Some(DiscordUser { guild, user, .. }) => ctx.reply(&format!(
             "You are {:?}:{}",
             guild.map(|g| *g.as_u64()),
-            user
+            user.id.as_u64(),
         )),
     }
     ctx.reply(&format!("Flags: {}", ctx.perms()));
