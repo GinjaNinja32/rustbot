@@ -186,11 +186,11 @@ impl TBot for Bot {
         &self.db
     }
 
-    fn irc_send_privmsg(&self, cfg: &str, channel: &str, message: &str) {
+    fn irc_send_privmsg(&self, _cfg: &str, _channel: &str, _message: &str) {
         // TODO
     }
 
-    fn irc_send_raw(&self, cfg: &str, line: &str) {
+    fn irc_send_raw(&self, _cfg: &str, _line: &str) {
         // TODO
     }
 }
