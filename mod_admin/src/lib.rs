@@ -13,7 +13,6 @@ pub fn get_meta() -> types::Meta {
     meta.commandrc("raw", Arc::new(wrap(raw)));
     meta.commandrc("join", Arc::new(wrap(join)));
     meta.commandrc("part", Arc::new(wrap(part)));
-    meta.commandrc("e", Arc::new(wrap(exec)));
     meta.commandrc("q", Arc::new(wrap(query)));
     meta.command("whoami", whoami);
     meta
@@ -81,45 +80,38 @@ fn part(ctx: &mut types::Context, args: &str) {
     ctx.reply("done");
 }
 
-fn exec(ctx: &mut types::Context, args: &str) {
-    let result = {
-        let db = ctx.bot().sql().lock().unwrap();
-        let r = db.execute(args, NO_PARAMS);
-        r
-    };
-    match result {
-        Ok(n) => ctx.reply(&format!("{} rows changed", n)),
-        Err(e) => ctx.reply(&format!("{}", e)),
-    }
-}
-
 fn query(ctx: &mut types::Context, args: &str) {
-    let result: Result<(String, Vec<String>), rusqlite::Error> = {
+    let result: Result<String, rusqlite::Error> = {
         let db = ctx.bot().sql().lock().unwrap();
         let r = db.prepare(args).and_then(|mut stmt| {
-            let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-            let colstr = format!("({})", cols.join(", "));
-            stmt.query_map(NO_PARAMS, |row| {
-                let vals: Vec<String> = (0..row.column_count())
-                    .map(|i| match row.get_raw(i) {
-                        Null => "null".to_string(),
-                        Integer(i) => format!("{}", i),
-                        Real(f) => format!("{}", f),
-                        Text(s) => format!("{:?}", s),
-                        Blob(b) => format!("{:?}", b),
-                    })
-                    .collect();
-                format!("({})", vals.join(", "))
-            })
-            .and_then(|rows| {
-                let r: Result<Vec<String>, rusqlite::Error> = rows.collect();
-                Ok((colstr, r?))
-            })
+            if stmt.column_count() == 0 {
+                db.execute(args, NO_PARAMS)
+                    .map(|n| format!("{} row(s) changed", n))
+            } else {
+                let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+                let colstr = format!("({})", cols.join(", "));
+                stmt.query_map(NO_PARAMS, |row| {
+                    let vals: Vec<String> = (0..row.column_count())
+                        .map(|i| match row.get_raw(i) {
+                            Null => "null".to_string(),
+                            Integer(i) => format!("{}", i),
+                            Real(f) => format!("{}", f),
+                            Text(s) => format!("{:?}", s),
+                            Blob(b) => format!("{:?}", b),
+                        })
+                        .collect();
+                    format!("({})", vals.join(", "))
+                })
+                .and_then(|rows| {
+                    let r: Result<Vec<String>, rusqlite::Error> = rows.collect();
+                    Ok(format!("{}: {}", colstr, r?.join(", ")))
+                })
+            }
         });
         r
     };
     match result {
-        Ok((cols, rows)) => ctx.reply(&format!("{}: {}", cols, &rows.join(", "))),
+        Ok(message) => ctx.reply(message.as_str()),
         Err(e) => ctx.reply(&format!("{}", e)),
     }
 }
