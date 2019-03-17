@@ -1,60 +1,42 @@
 use db;
+use irc::client::ext::ClientExt;
 use irc::client::prelude as irc;
-use irc::client::prelude::*;
+use irc::client::prelude::Client;
 use libloading::{Library, Symbol};
 use rusqlite::{Connection, NO_PARAMS};
 use serenity::model::channel;
-use serenity::prelude as serenity;
-use shared::types;
-use shared::types::Bot as TBot;
-use shared::types::Source::*;
+use serenity::prelude as dis;
+use shared::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 
-use self::BotClient::*;
-
-struct Bot {
-    clients: BTreeMap<String, Arc<IrcClient>>,
+struct Rustbot {
+    clients: BTreeMap<String, Arc<irc::IrcClient>>,
     db: Mutex<rusqlite::Connection>,
     modules: BTreeMap<String, Module>,
-    commands: BTreeMap<String, types::Command>,
+    commands: BTreeMap<String, Command>,
 }
 
-impl Bot {
-    fn irc_get_source(
-        &mut self,
-        cfg: String,
-        prefix: Option<String>,
-        channel: Option<String>,
-    ) -> Option<types::Source> {
+impl Rustbot {
+    fn irc_parse_prefix(&mut self, prefix: Option<String>) -> Option<Prefix> {
         match prefix {
             None => None,
             Some(s) => {
                 if !s.contains('!') {
-                    Some(IRCServer {
-                        config: cfg.clone(),
-                        host: s,
-                        channel: channel,
-                    })
+                    Some(Server(s))
                 } else {
                     let ss = s.clone();
                     let nr: Vec<&str> = ss.splitn(2, '!').collect();
                     if !nr[1].contains('@') {
-                        Some(IRCServer {
-                            config: cfg.clone(),
-                            host: s,
-                            channel: channel,
-                        })
+                        Some(Server(s))
                     } else {
                         let uh: Vec<&str> = nr[1].splitn(2, '@').collect();
-                        Some(IRCUser {
-                            config: cfg.clone(),
+                        Some(User {
                             nick: nr[0].to_string(),
                             user: uh[0].to_string(),
                             host: uh[1].to_string(),
-                            channel: channel,
                         })
                     }
                 }
@@ -62,89 +44,128 @@ impl Bot {
         }
     }
 
-    fn irc_incoming(&mut self, client: &IrcClient, cfg: String, irc_msg: Message) {
-        if let Command::PRIVMSG(channel, message) = irc_msg.command {
-            let source = self.irc_get_source(cfg, irc_msg.prefix, Some(channel));
+    fn irc_incoming(&mut self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
+        if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
+            let source = IRC {
+                config: cfg.clone(),
+                prefix: self.irc_parse_prefix(irc_msg.prefix),
+                channel: Some(channel),
+            };
             let ctx = &mut Context {
                 bot: self,
-                client: IRCClient { client },
                 source: source,
+                bot_name: bot_name.to_string(),
             };
-            ctx.handle(message.as_str());
+            Rustbot::handle(ctx, message.as_str());
+        }
+    }
+
+    fn dis_incoming(&mut self, msg: channel::Message) {
+        let ctx = &mut Context {
+            bot: self,
+            source: Discord {
+                user: msg.author,
+                channel: msg.channel_id,
+                guild: msg.guild_id,
+            },
+            bot_name: "".to_string(),
+        };
+
+        Rustbot::handle(ctx, msg.content.as_str());
+    }
+
+    fn handle(ctx: &mut Context, message: &str) {
+        let cmdchars: String = {
+            let db = ctx.bot.sql().lock().unwrap();
+            match ctx.source {
+                IRC { ref config, .. } => db
+                    .query_row(
+                        "SELECT cmdchars FROM irc_config WHERE id = ?",
+                        vec![config],
+                        |row| row.get(0),
+                    )
+                    .unwrap(),
+                Discord { .. } => db
+                    .query_row("SELECT cmdchars FROM dis_config", NO_PARAMS, |row| {
+                        row.get(0)
+                    })
+                    .unwrap(),
+            }
+        };
+        if let Some(c) = message.get(0..1) {
+            if cmdchars.contains(c) {
+                // it's a command!
+                let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
+                if let Some(f) = ctx.bot.commands().get(parts[0]).cloned() {
+                    let result = f(ctx, parts.get(1).unwrap_or(&""));
+                    result
+                        .or_else(|e| ctx.reply(&format!("command failed: {}", e)))
+                        .err()
+                        .map(|e| println!("failed to handle error: {}", e));
+                }
+                return;
+            }
         }
     }
 }
 
-impl TBot for Bot {
-    fn drop_module(&mut self, name: &str) -> Result<(), String> {
+impl shared::types::Bot for Rustbot {
+    fn drop_module(&mut self, name: &str) -> Result<()> {
         if let Some(m) = self.modules.remove(name) {
-            let db = self.db.lock().map_err(|e| format!("{}", e))?;
+            let db = self.db.lock()?;
             db
                 .execute(
                     "INSERT INTO modules (name, enabled) VALUES (?, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
                     vec![name],
-                )
-                .map_err(|e| format!("{}", e))?;
-            match m.get_meta() {
-                Ok(meta) => {
-                    for command in meta.commands().iter() {
-                        self.commands.remove(command.0);
-                    }
-                    Ok(())
-                }
-                Err(e) => Err(format!("failed to get module metadata: {}", e)),
+                )?;
+            let meta = m.get_meta()?;
+            for command in meta.commands().iter() {
+                self.commands.remove(command.0);
             }
+            Ok(())
         } else {
             Ok(())
         }
     }
 
-    fn load_module(&mut self, name: &str) -> Result<(), String> {
+    fn load_module(&mut self, name: &str) -> Result<()> {
         let libpath = if cfg!(debug_assertions) {
             format!("libmod_{}.so", name)
         } else {
             format!("target/release/libmod_{}.so", name)
         };
-        match Library::new(libpath) {
-            Ok(lib) => {
-                let db = self.db.lock().map_err(|e| format!("{}", e))?;
-                db
-                    .execute(
-                        "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
-                        vec![name],
-                    )
-                    .map_err(|e| format!("{}", e))?;
-                let m = Module {
-                    //name: name.to_string(),
-                    lib,
-                };
-                match m.get_meta() {
-                    Ok(meta) => {
-                        for command in meta.commands().iter() {
-                            self.commands
-                                .insert(command.0.to_string(), (*command.1).clone());
-                        }
-                    }
-                    Err(e) => return Err(format!("failed to get module metadata: {}", e)),
-                }
-                self.modules.insert(name.to_string(), m);
-                Ok(())
-            }
-            Err(e) => Err(format!("failed to load module: {}", e)),
+        let lib = Library::new(libpath)?;
+
+        let db = self.db.lock().map_err(|e| format!("{}", e))?;
+        db
+            .execute(
+                "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
+                vec![name],
+            )?;
+        let m = Module { lib };
+        let meta = m.get_meta()?;
+        for command in meta.commands().iter() {
+            self.commands
+                .insert(command.0.to_string(), (*command.1).clone());
         }
+        self.modules.insert(name.to_string(), m);
+        Ok(())
     }
 
-    fn has_perm(&self, who: types::Source, what: u64) -> bool {
-        (self.perms(who) & what) != 0
+    fn has_perm(&self, who: Source, what: u64) -> Result<bool> {
+        Ok((self.perms(who)? & what) != 0)
     }
 
-    fn perms(&self, who: types::Source) -> u64 {
+    fn perms(&self, who: Source) -> Result<u64> {
         match who {
-            IRCUser {
+            IRC {
                 config: c,
-                nick: n,
-                user: u,
-                host: h,
+                prefix:
+                    Some(User {
+                        nick: n,
+                        user: u,
+                        host: h,
+                    }),
                 ..
             } => {
                 let db = self.db.lock().unwrap();
@@ -160,10 +181,9 @@ impl TBot for Bot {
                     }
                     Ok(v) => v,
                 };
-                return perms as u64;
+                Ok(perms as u64)
             }
-            IRCServer { .. } => 0,
-            DiscordUser { user, .. } => {
+            Discord { user, .. } => {
                 let db = self.db.lock().unwrap();
                 let perms: i64 = match db.query_row(
                     "SELECT flags FROM dis_permissions WHERE user_id = ?",
@@ -177,8 +197,9 @@ impl TBot for Bot {
                     }
                     Ok(v) => v,
                 };
-                return perms as u64;
+                Ok(perms as u64)
             }
+            _ => Ok(0),
         }
     }
 
@@ -186,130 +207,31 @@ impl TBot for Bot {
         &self.db
     }
 
-    fn irc_send_privmsg(&self, _cfg: &str, _channel: &str, _message: &str) {
-        // TODO
+    fn irc_send_privmsg(&self, cfg: &str, channel: &str, message: &str) -> Result<()> {
+        if let Some(client) = self.clients.get(cfg) {
+            client.send_privmsg(channel, message)?;
+            Ok(())
+        } else {
+            Err(Error::new("invalid configid"))
+        }
     }
 
-    fn irc_send_raw(&self, _cfg: &str, _line: &str) {
-        // TODO
+    fn irc_send_raw(&self, cfg: &str, line: &str) -> Result<()> {
+        if let Some(client) = self.clients.get(cfg) {
+            client.send(line)?;
+            Ok(())
+        } else {
+            Err(Error::new("invalid configid"))
+        }
+    }
+
+    fn commands(&self) -> &BTreeMap<String, Command> {
+        &self.commands
     }
 }
 
-struct Context<'a> {
-    bot: &'a mut Bot,
-    source: Option<types::Source>,
-    client: BotClient<'a>,
-}
-
-impl<'a> Context<'a> {
-    fn handle(&mut self, message: &str) {
-        let cmdchars: String = {
-            let db = self.bot.db.lock().unwrap();
-            match self.source {
-                Some(IRCServer { ref config, .. }) => db
-                    .query_row(
-                        "SELECT cmdchars FROM irc_config WHERE id = ?",
-                        vec![config],
-                        |row| row.get(0),
-                    )
-                    .unwrap(),
-                Some(IRCUser { ref config, .. }) => db
-                    .query_row(
-                        "SELECT cmdchars FROM irc_config WHERE id = ?",
-                        vec![config],
-                        |row| row.get(0),
-                    )
-                    .unwrap(),
-                Some(DiscordUser { .. }) => db
-                    .query_row("SELECT cmdchars FROM dis_config", NO_PARAMS, |row| {
-                        row.get(0)
-                    })
-                    .unwrap(),
-                None => "".to_string(),
-            }
-        };
-        if let Some(c) = message.get(0..1) {
-            if cmdchars.contains(c) {
-                // it's a command!
-                let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
-                if let Some(f) = self.bot.commands.get(parts[0]).cloned() {
-                    f(self, parts.get(1).unwrap_or(&""));
-                }
-                return;
-            }
-        }
-    }
-}
-
-impl<'a> types::Context for Context<'a> {
-    fn reply(&self, message: &str) {
-        match &self.client {
-            IRCClient { client } => {
-                if let Some(IRCUser {
-                    channel: Some(channel),
-                    nick,
-                    ..
-                }) = self.get_source()
-                {
-                    if channel == client.current_nickname() {
-                        self.irc_send_privmsg(nick.as_str(), message);
-                    } else {
-                        self.irc_send_privmsg(
-                            channel.as_str(),
-                            &format!("{}: {}", nick.as_str(), message),
-                        );
-                    }
-                }
-            }
-            DiscordClient { .. } => {
-                if let Some(DiscordUser { channel, .. }) = self.get_source() {
-                    match channel.say(message) {
-                        Err(e) => println!("failed to send: {}", e),
-                        Ok(_) => (),
-                    }
-                }
-            }
-        }
-    }
-    fn get_source(&self) -> Option<types::Source> {
-        match self.source {
-            Some(ref c) => Some(c.clone()),
-            None => None,
-        }
-    }
-    fn bot(&mut self) -> &mut TBot {
-        self.bot
-    }
-    fn has_perm(&self, what: u64) -> bool {
-        (self.perms() & what) != 0
-    }
-    fn perms(&self) -> u64 {
-        if let Some(ref src) = self.source {
-            return self.bot.perms(src.clone());
-        }
-        return 0;
-    }
-
-    fn irc_send_privmsg(&self, chan: &str, msg: &str) {
-        if let IRCClient { client } = &self.client {
-            if let Some(e) = client.send_privmsg(chan, msg).err() {
-                println!("failed to send privmsg: {}", e)
-            }
-        }
-    }
-
-    fn irc_send_raw(&mut self, what: &str) {
-        if let IRCClient { client } = &self.client {
-            match client.send(what) {
-                Ok(()) => (),
-                Err(e) => println!("failed to send message: {}", e),
-            }
-        }
-    }
-}
-
-pub fn start() -> Result<(), String> {
-    let b = Arc::new(RwLock::new(Bot {
+pub fn start() -> Result<()> {
+    let b = Arc::new(RwLock::new(Rustbot {
         clients: BTreeMap::new(),
         db: Mutex::new(db::open().unwrap()),
         modules: BTreeMap::new(),
@@ -322,7 +244,7 @@ pub fn start() -> Result<(), String> {
         let mut stmt = db
             .prepare("SELECT id, nick, user, real, server, port, ssl FROM irc_config")
             .map_err(|e| format!("{}", e))?;
-        let result: Result<Vec<(String, irc::Config)>, rusqlite::Error> = stmt
+        let result: std::result::Result<Vec<(String, irc::Config)>, rusqlite::Error> = stmt
             .query_map(NO_PARAMS, |row| {
                 (
                     row.get(0),
@@ -336,11 +258,10 @@ pub fn start() -> Result<(), String> {
                         ..irc::Config::default()
                     },
                 )
-            })
-            .map_err(|e| format!("{}", e))?
+            })?
             .collect();
 
-        result.map_err(|e| format!("{}", e))?
+        result?
     };
 
     for (id, conf) in configs.iter_mut() {
@@ -379,9 +300,10 @@ pub fn start() -> Result<(), String> {
 
     for (id, conf) in configs.iter() {
         println!("{}", id);
-        let client = Arc::new(IrcClient::from_config(conf.clone()).map_err(|e| format!("{}", e))?);
+        let client =
+            Arc::new(irc::IrcClient::from_config(conf.clone()).map_err(|e| format!("{}", e))?);
         client
-            .send_cap_req(&[Capability::MultiPrefix])
+            .send_cap_req(&[irc::Capability::MultiPrefix])
             .map_err(|e| format!("{}", e))?;
         client.identify().map_err(|e| format!("{}", e))?;
 
@@ -400,7 +322,7 @@ pub fn start() -> Result<(), String> {
             };
             client
                 .for_each_incoming(|irc_msg| match b.write().map_err(|e| format!("{}", e)) {
-                    Ok(mut b) => b.irc_incoming(&client, id.clone(), irc_msg),
+                    Ok(mut b) => b.irc_incoming(id.clone(), client.current_nickname(), irc_msg),
                     Err(e) => println!("failed to handle message: {}", e),
                 })
                 .map_err(|e| format!("{}", e))
@@ -416,31 +338,19 @@ pub fn start() -> Result<(), String> {
         })
         .unwrap()
     };
-    let mut dis = serenity::Client::new(&token, DiscordBot { bot: b }).unwrap();
-    if let Err(e) = dis.start() {
-        return Err(format!("discord failed: {}", e));
-    };
+    let mut dis = dis::Client::new(&token, DiscordBot { bot: b }).unwrap();
+    dis.start()?;
     Ok(())
 }
 
 struct DiscordBot {
-    bot: Arc<RwLock<Bot>>,
+    bot: Arc<RwLock<Rustbot>>,
 }
 
-impl serenity::EventHandler for DiscordBot {
-    fn message(&self, sctx: serenity::Context, msg: channel::Message) {
+impl dis::EventHandler for DiscordBot {
+    fn message(&self, _disctx: dis::Context, msg: channel::Message) {
         let mut bot = self.bot.write().unwrap();
-        let mut ctx = Context {
-            bot: &mut bot,
-            client: DiscordClient { client: sctx },
-            source: Some(DiscordUser {
-                user: msg.author,
-                channel: msg.channel_id,
-                guild: msg.guild_id,
-            }),
-        };
-
-        ctx.handle(msg.content.as_str());
+        bot.dis_incoming(msg);
     }
 }
 
@@ -450,22 +360,13 @@ struct Module {
 }
 
 impl Module {
-    fn get_meta(&self) -> Result<types::Meta, String> {
+    fn get_meta(&self) -> Result<Meta> {
         unsafe {
-            self.lib
-                .get(b"get_meta")
-                .map_err(|e| format!("{}", e))
-                .and_then(
-                    |f: Symbol<Option<unsafe fn() -> types::Meta>>| match Symbol::lift_option(f) {
-                        Some(f) => Ok(f()),
-                        None => Err("symbol not found".to_string()),
-                    },
-                )
+            let sym: Symbol<Option<unsafe fn() -> Meta>> = self.lib.get(b"get_meta")?;
+            match Symbol::lift_option(sym) {
+                Some(f) => Ok(f()),
+                None => Err(Error::new("symbol not found")),
+            }
         }
     }
-}
-
-enum BotClient<'a> {
-    IRCClient { client: &'a IrcClient },
-    DiscordClient { client: serenity::Context },
 }

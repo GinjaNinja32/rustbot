@@ -3,13 +3,12 @@ extern crate shared;
 
 use rusqlite::types::ValueRef::*;
 use rusqlite::NO_PARAMS;
-use shared::types;
-use shared::types::Source::*;
+use shared::prelude::*;
 use std::sync::Arc;
 
 #[no_mangle]
-pub fn get_meta() -> types::Meta {
-    let mut meta = types::Meta::new();
+pub fn get_meta() -> Meta {
+    let mut meta = Meta::new();
     meta.commandrc("raw", Arc::new(wrap(raw)));
     meta.commandrc("join", Arc::new(wrap(join)));
     meta.commandrc("part", Arc::new(wrap(part)));
@@ -18,9 +17,9 @@ pub fn get_meta() -> types::Meta {
     meta
 }
 
-fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &str) {
-    move |ctx: &mut types::Context, args| {
-        if ctx.has_perm(types::PERM_ADMIN) {
+fn wrap(f: impl Fn(&mut Context, &str) -> Result<()>) -> impl Fn(&mut Context, &str) -> Result<()> {
+    move |ctx: &mut Context, args| {
+        if ctx.has_perm(PERM_ADMIN)? {
             f(ctx, args)
         } else {
             ctx.reply("permission denied")
@@ -28,61 +27,49 @@ fn wrap(f: impl Fn(&mut types::Context, &str)) -> impl Fn(&mut types::Context, &
     }
 }
 
-fn raw(ctx: &mut types::Context, args: &str) {
-    ctx.irc_send_raw(args);
+fn raw(ctx: &mut Context, args: &str) -> Result<()> {
+    ctx.irc_send_raw(args)
 }
 
-fn join(ctx: &mut types::Context, args: &str) {
+fn join(ctx: &mut Context, args: &str) -> Result<()> {
     let cfg_id = {
-        match ctx.get_source() {
-            Some(IRCUser { config, .. }) => config,
-            Some(IRCServer { config, .. }) => config,
-            _ => return,
+        match ctx.source {
+            IRC { ref config, .. } => config.clone(),
+            _ => return Err(Error::new("must use this command from IRC")),
         }
     };
-    let result = {
-        let db = ctx.bot().sql().lock().unwrap();
-        let r = db.execute(
+    {
+        let db = ctx.bot.sql().lock().unwrap();
+        db.execute(
             "INSERT INTO irc_channels (channel, config_id) VALUES (?, ?) ON CONFLICT (channel, config_id) DO NOTHING",
             vec![args, cfg_id.as_str()],
-        );
-        r
-    };
-    if let Err(e) = result {
-        ctx.reply(&format!("join failed: {}", e));
-        return;
+        )?;
     }
-    ctx.irc_send_raw(&format!("JOIN {}", args));
-    ctx.reply("done");
+    ctx.irc_send_raw(&format!("JOIN {}", args))?;
+    ctx.reply("done")
 }
 
-fn part(ctx: &mut types::Context, args: &str) {
+fn part(ctx: &mut Context, args: &str) -> Result<()> {
     let cfg_id = {
-        match ctx.get_source() {
-            Some(IRCUser { config, .. }) => config,
-            Some(IRCServer { config, .. }) => config,
-            _ => return,
+        match ctx.source {
+            IRC { ref config, .. } => config.clone(),
+            _ => return Err(Error::new("must use this command from IRC")),
         }
     };
-    let result = {
-        let db = ctx.bot().sql().lock().unwrap();
-        let r = db.execute(
+    {
+        let db = ctx.bot.sql().lock().unwrap();
+        db.execute(
             "DELETE FROM irc_channels WHERE channel = ? AND config_id = ?",
             vec![args, cfg_id.as_str()],
-        );
-        r
-    };
-    if let Err(e) = result {
-        ctx.reply(&format!("part failed: {}", e));
-        return;
+        )?;
     }
-    ctx.irc_send_raw(&format!("part {}", args));
-    ctx.reply("done");
+    ctx.irc_send_raw(&format!("part {}", args))?;
+    ctx.reply("done")
 }
 
-fn query(ctx: &mut types::Context, args: &str) {
-    let result: Result<String, rusqlite::Error> = {
-        let db = ctx.bot().sql().lock().unwrap();
+fn query(ctx: &mut Context, args: &str) -> Result<()> {
+    let result: String = {
+        let db = ctx.bot.sql().lock()?;
         let r = db.prepare(args).and_then(|mut stmt| {
             if stmt.column_count() == 0 {
                 db.execute(args, NO_PARAMS)
@@ -103,35 +90,34 @@ fn query(ctx: &mut types::Context, args: &str) {
                     format!("({})", vals.join(", "))
                 })
                 .and_then(|rows| {
-                    let r: Result<Vec<String>, rusqlite::Error> = rows.collect();
+                    let r: std::result::Result<Vec<String>, rusqlite::Error> = rows.collect();
                     Ok(format!("{}: {}", colstr, r?.join(", ")))
                 })
             }
         });
-        r
+        r?
     };
-    match result {
-        Ok(message) => ctx.reply(message.as_str()),
-        Err(e) => ctx.reply(&format!("{}", e)),
-    }
+    ctx.reply(result.as_str())
 }
 
-fn whoami(ctx: &mut types::Context, _: &str) {
-    match ctx.get_source() {
-        None => ctx.reply(&format!("I don't know who you are")),
-        Some(IRCServer { config, host, .. }) => ctx.reply(&format!("You are {}:{}", config, host)),
-        Some(IRCUser {
-            config,
-            nick,
-            user,
-            host,
+fn whoami(ctx: &mut Context, _: &str) -> Result<()> {
+    match ctx.source {
+        IRC {
+            ref config,
+            ref prefix,
             ..
-        }) => ctx.reply(&format!("You are {}:{}!{}@{}", config, nick, user, host)),
-        Some(DiscordUser { guild, user, .. }) => ctx.reply(&format!(
+        } => {
+            if let Some(p) = prefix {
+                ctx.reply(&format!("You are {}:{}", config, p))?;
+            }
+        }
+        Discord {
+            guild, ref user, ..
+        } => ctx.reply(&format!(
             "You are {:?}:{}",
             guild.map(|g| *g.as_u64()),
             user.id.as_u64(),
-        )),
+        ))?,
     }
-    ctx.reply(&format!("Flags: {}", ctx.perms()));
+    ctx.reply(&format!("Flags: {}", ctx.perms()?))
 }

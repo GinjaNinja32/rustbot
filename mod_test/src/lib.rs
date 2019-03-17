@@ -1,12 +1,12 @@
 extern crate shared;
 
-use shared::types;
+use shared::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> types::Meta {
-    let mut meta = types::Meta::new();
-    meta.command("test", |ctx: &mut types::Context, _args| {
-        ctx.reply(&format!("beep boop {}", ctx.perms()));
+pub fn get_meta() -> Meta {
+    let mut meta = Meta::new();
+    meta.command("test", |ctx: &mut Context, _args| {
+        ctx.reply(&format!("beep boop {}", ctx.perms()?))
     });
     meta
 }
