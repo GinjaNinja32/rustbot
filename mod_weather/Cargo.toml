@@ -1,0 +1,15 @@
+[package]
+name = "mod_weather"
+version = "0.1.0"
+authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
+
+[lib]
+crate_type = ["dylib"]
+
+[dependencies]
+shared = { path = "../shared" }
+reqwest = "0.9.11"
+serde = "1.0.87"
+serde_derive = "1.0.87"
+chrono = "0.4.6"
+rusqlite = { version = "0.16.0", features = ["bundled"] }
