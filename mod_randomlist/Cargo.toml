@@ -1,0 +1,11 @@
+[package]
+name = "mod_randomlist"
+version = "0.1.0"
+authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
+
+[lib]
+crate_type = ["dylib"]
+
+[dependencies]
+shared = { path = "../shared" }
+rusqlite = { version = "0.16.0", features = ["bundled"] }
