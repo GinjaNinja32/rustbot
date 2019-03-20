@@ -46,7 +46,7 @@ fn weather(ctx: &mut Context, args: &str) -> Result<()> {
         data.wind.speed * 3.6,
         text_for_angle(data.wind.deg)
     );
-    let pressure = format!("{} mb", data.main.pressure);
+    let pressure = format!("{:.0} mb", data.main.pressure);
     ctx.reply(&format!("Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
                        location,
                        timestamp,
@@ -58,24 +58,24 @@ fn weather(ctx: &mut Context, args: &str) -> Result<()> {
                        ))
 }
 
-fn text_for_angle(angle: i64) -> String {
-    if angle < 0 || angle > 360 {
+fn text_for_angle(angle: f64) -> String {
+    if angle < 0.0 || angle > 360.0 {
         "unknown".to_string()
-    } else if angle < 23 || angle >= 23 + 315 {
+    } else if angle < 23.0 || angle >= 23.0 + 315.0 {
         "north".to_string()
-    } else if angle < 23 + 45 {
+    } else if angle < 23.0 + 45.0 {
         "northeast".to_string()
-    } else if angle < 23 + 90 {
+    } else if angle < 23.0 + 90.0 {
         "east".to_string()
-    } else if angle < 23 + 135 {
+    } else if angle < 23.0 + 135.0 {
         "southeast".to_string()
-    } else if angle < 23 + 180 {
+    } else if angle < 23.0 + 180.0 {
         "south".to_string()
-    } else if angle < 23 + 225 {
+    } else if angle < 23.0 + 225.0 {
         "southwest".to_string()
-    } else if angle < 23 + 270 {
+    } else if angle < 23.0 + 270.0 {
         "west".to_string()
-    } else if angle < 23 + 315 {
+    } else if angle < 23.0 + 315.0 {
         "northwest".to_string()
     } else {
         "what".to_string()
@@ -96,7 +96,7 @@ struct Clouds {
 #[derive(Debug, Deserialize)]
 struct Main {
     humidity: i64,
-    pressure: i64,
+    pressure: f64,
     temp: f64,
     temp_max: f64,
     temp_min: f64,
@@ -105,12 +105,9 @@ struct Main {
 #[derive(Debug, Deserialize)]
 struct Sys {
     country: String,
-    id: i64,
     message: f64,
     sunrise: i64,
     sunset: i64,
-    #[serde(rename = "type")]
-    typ: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,7 +120,7 @@ struct Weather {
 
 #[derive(Debug, Deserialize)]
 struct Wind {
-    deg: i64,
+    deg: f64,
     gust: Option<f64>,
     speed: f64,
 }
@@ -139,7 +136,7 @@ struct Response {
     main: Main,
     name: String,
     sys: Sys,
-    visibility: i64,
+    visibility: Option<i64>,
     weather: Vec<Weather>,
     wind: Wind,
 }
