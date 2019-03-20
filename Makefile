@@ -16,13 +16,17 @@ export cargotoml
 define librs
 extern crate shared;
 
-use shared::types;
+use shared::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> types::Meta {
-    let mut meta = types::Meta::new();
-    // meta.command("foo", foo);
+pub fn get_meta() -> Meta {
+    let mut meta = Meta::new();
+    meta.command("foo", foo);
     meta
+}
+
+fn foo(ctx: &mut Context, args: &str) -> Result<()> {
+	Ok(())
 }
 endef
 export librs
