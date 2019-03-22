@@ -30,6 +30,12 @@ fn weather(ctx: &mut Context, args: &str) -> Result<()> {
         .query(&params)
         .send()?;
 
+    match result.status().as_u16() {
+        200 => (),
+        404 => return ctx.reply("could not find location"),
+        code => return ctx.reply(&format!("error {}", code)),
+    }
+
     let data: Response = result.json()?;
 
     let location = format!("{}, {}", data.name, data.sys.country);
