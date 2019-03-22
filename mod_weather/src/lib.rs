@@ -53,15 +53,16 @@ fn weather(ctx: &mut Context, args: &str) -> Result<()> {
         text_for_angle(data.wind.deg)
     );
     let pressure = format!("{:.0} mb", data.main.pressure);
-    ctx.reply(&format!("Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
-                       location,
-                       timestamp,
-                       weathers.join(", "),
-                       temp,
-                       data.main.humidity,
-                       wind,
-                       pressure
-                       ))
+    ctx.reply(&format!(
+        "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
+        location,
+        timestamp,
+        weathers.join(", "),
+        temp,
+        data.main.humidity,
+        wind,
+        pressure
+    ))
 }
 
 fn text_for_angle(angle: f64) -> String {

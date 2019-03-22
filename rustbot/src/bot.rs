@@ -137,11 +137,10 @@ impl shared::types::Bot for Rustbot {
         let lib = Library::new(libpath)?;
 
         let db = self.db.lock().map_err(|e| format!("{}", e))?;
-        db
-            .execute(
-                "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
-                vec![name],
-            )?;
+        db.execute(
+            "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
+            vec![name],
+        )?;
         let m = Module { lib };
         let meta = m.get_meta()?;
         for command in meta.commands().iter() {
