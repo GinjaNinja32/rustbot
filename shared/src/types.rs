@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 use error::*;
 use rusqlite::types::{FromSqlError, ValueRef};
 use rusqlite::Connection;
@@ -12,9 +14,6 @@ bitflags! {
     pub struct Perms: u64 {
         const None  = 0x00000000;
         const Admin = 0x00000001;
-        const TestA = 0x00000002;
-        const TestB = 0x00000004;
-        const TestC = 0x00000008;
     }
 }
 
