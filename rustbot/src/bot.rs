@@ -152,11 +152,11 @@ impl shared::types::Bot for Rustbot {
         Ok(())
     }
 
-    fn has_perm(&self, who: Source, what: u64) -> Result<bool> {
-        Ok((self.perms(who)? & what) != 0)
+    fn has_perm(&self, who: Source, what: Perms) -> Result<bool> {
+        Ok(self.perms(who)?.contains(what))
     }
 
-    fn perms(&self, who: Source) -> Result<u64> {
+    fn perms(&self, who: Source) -> Result<Perms> {
         match who {
             IRC {
                 config: c,
@@ -169,37 +169,37 @@ impl shared::types::Bot for Rustbot {
                 ..
             } => {
                 let db = self.db.lock().unwrap();
-                let perms: i64 = match db.query_row(
+                let perms: Perms = match db.query_row(
                     "SELECT flags FROM irc_permissions WHERE config_id = ? AND nick = ? AND user = ? AND host = ?",
                     vec![c, n, u, h],
                     |row| row.get(0),
                 ) {
-                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Perms::None,
                     Err(e) => {
                         println!("error: {}", e);
-                        0
+                        Perms::None
                     }
                     Ok(v) => v,
                 };
-                Ok(perms as u64)
+                Ok(perms)
             }
             Discord { user, .. } => {
                 let db = self.db.lock().unwrap();
-                let perms: i64 = match db.query_row(
+                let perms: Perms = match db.query_row(
                     "SELECT flags FROM dis_permissions WHERE user_id = ?",
                     vec![*user.id.as_u64() as i64],
                     |row| row.get(0),
                 ) {
-                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Perms::None,
                     Err(e) => {
                         println!("error: {}", e);
-                        0
+                        Perms::None
                     }
                     Ok(v) => v,
                 };
-                Ok(perms as u64)
+                Ok(perms)
             }
-            _ => Ok(0),
+            _ => Ok(Perms::None),
         }
     }
 

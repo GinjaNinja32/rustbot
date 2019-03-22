@@ -14,7 +14,7 @@ pub fn get_meta() -> Meta {
 }
 
 fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
-    if !ctx.has_perm(PERM_ADMIN)? {
+    if !ctx.has_perm(Perms::Admin)? {
         return ctx.reply("permission denied");
     }
 

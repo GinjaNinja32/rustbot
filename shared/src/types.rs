@@ -1,4 +1,5 @@
 use error::*;
+use rusqlite::types::{FromSqlError, ValueRef};
 use rusqlite::Connection;
 use serenity::model::prelude as serenity;
 use std::collections::BTreeMap;
@@ -7,7 +8,41 @@ use std::sync::Mutex;
 use types::Prefix::*;
 use types::Source::*;
 
-pub const PERM_ADMIN: u64 = 1;
+bitflags! {
+    pub struct Perms: u64 {
+        const None  = 0x00000000;
+        const Admin = 0x00000001;
+        const TestA = 0x00000002;
+        const TestB = 0x00000004;
+        const TestC = 0x00000008;
+    }
+}
+
+impl std::fmt::Display for Perms {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{:?}", self)?;
+        dbg!(self.bits);
+
+        let diff = self.bits & !Perms::all().bits;
+        dbg!(diff);
+        if diff != 0 {
+            dbg!(());
+            write!(f, " | 0x{:x}", diff)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl rusqlite::types::FromSql for Perms {
+    fn column_result(v: ValueRef) -> std::result::Result<Perms, FromSqlError> {
+        match v {
+            ValueRef::Null => Ok(Perms::None),
+            ValueRef::Integer(v) => Ok(Perms { bits: v as u64 }),
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
 
 pub type Command = Arc<Fn(&mut Context, &str) -> Result<()> + Send + Sync>;
 
@@ -35,8 +70,8 @@ impl Meta {
 pub trait Bot {
     fn load_module(&mut self, &str) -> Result<()>;
     fn drop_module(&mut self, &str) -> Result<()>;
-    fn perms(&self, Source) -> Result<u64>;
-    fn has_perm(&self, Source, u64) -> Result<bool>;
+    fn perms(&self, Source) -> Result<Perms>;
+    fn has_perm(&self, Source, Perms) -> Result<bool>;
     fn sql(&mut self) -> &Mutex<Connection>;
     fn commands(&self) -> &BTreeMap<String, Command>;
 
@@ -83,10 +118,10 @@ impl<'a> Context<'a> {
 
         Ok(())
     }
-    pub fn has_perm(&self, flag: u64) -> Result<bool> {
-        Ok((self.perms()? & flag) != 0)
+    pub fn has_perm(&self, flag: Perms) -> Result<bool> {
+        Ok(self.perms()?.contains(flag))
     }
-    pub fn perms(&self) -> Result<u64> {
+    pub fn perms(&self) -> Result<Perms> {
         self.bot.perms(self.source.clone())
     }
 

@@ -11,3 +11,4 @@ irc = "0.13.6"
 serenity = "0.5"
 rusqlite = { version = "0.16.0", features = ["bundled"] }
 reqwest = "0.9.11"
+bitflags = "1.0.4"

@@ -2,6 +2,8 @@ extern crate irc;
 extern crate reqwest;
 extern crate rusqlite;
 extern crate serenity;
+#[macro_use]
+extern crate bitflags;
 
 pub mod error;
 pub mod types;

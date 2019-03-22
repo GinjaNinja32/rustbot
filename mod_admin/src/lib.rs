@@ -19,7 +19,7 @@ pub fn get_meta() -> Meta {
 
 fn wrap(f: impl Fn(&mut Context, &str) -> Result<()>) -> impl Fn(&mut Context, &str) -> Result<()> {
     move |ctx: &mut Context, args| {
-        if ctx.has_perm(PERM_ADMIN)? {
+        if ctx.has_perm(Perms::Admin)? {
             f(ctx, args)
         } else {
             ctx.reply("permission denied")
