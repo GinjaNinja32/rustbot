@@ -10,7 +10,7 @@ use shared::prelude::*;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.command("dice", cmd_dice);
+    meta.cmd("dice", Command::new(cmd_dice));
     meta
 }
 

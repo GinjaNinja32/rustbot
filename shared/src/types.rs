@@ -21,12 +21,9 @@ bitflags! {
 impl std::fmt::Display for Perms {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "{:?}", self)?;
-        dbg!(self.bits);
 
         let diff = self.bits & !Perms::all().bits;
-        dbg!(diff);
         if diff != 0 {
-            dbg!(());
             write!(f, " | 0x{:x}", diff)?;
         }
 
@@ -44,7 +41,36 @@ impl rusqlite::types::FromSql for Perms {
     }
 }
 
-pub type Command = Arc<Fn(&mut Context, &str) -> Result<()> + Send + Sync>;
+pub type CommandFn = Fn(&mut Context, &str) -> Result<()> + Send + Sync;
+#[derive(Clone)]
+pub struct Command {
+    pub function: Arc<CommandFn>,
+    pub req_perms: Perms,
+}
+
+impl Command {
+    pub fn new(f: fn(&mut Context, &str) -> Result<()>) -> Self {
+        Self::arc(Arc::new(f))
+    }
+    pub fn arc(f: Arc<CommandFn>) -> Self {
+        return Self {
+            function: f,
+            req_perms: Perms::None,
+        };
+    }
+    pub fn req_perms(&mut self, p: Perms) -> Self {
+        let mut s = self.clone();
+        s.req_perms.insert(p);
+        s
+    }
+    pub fn call(&self, ctx: &mut Context, args: &str) -> Result<()> {
+        if !ctx.perms()?.contains(self.req_perms) {
+            return ctx.reply("permission denied");
+        }
+
+        (self.function)(ctx, args)
+    }
+}
 
 pub struct Meta {
     commands: BTreeMap<String, Command>,
@@ -56,11 +82,8 @@ impl Meta {
             commands: BTreeMap::new(),
         }
     }
-    pub fn command(&mut self, name: &str, f: fn(&mut Context, &str) -> Result<()>) {
-        self.commands.insert(name.to_string(), Arc::new(f));
-    }
-    pub fn commandrc(&mut self, name: &str, f: Command) {
-        self.commands.insert(name.to_string(), f);
+    pub fn cmd(&mut self, name: &str, cmd: Command) {
+        self.commands.insert(name.to_string(), cmd);
     }
     pub fn commands(&self) -> &BTreeMap<String, Command> {
         &self.commands
@@ -71,7 +94,6 @@ pub trait Bot {
     fn load_module(&mut self, &str) -> Result<()>;
     fn drop_module(&mut self, &str) -> Result<()>;
     fn perms(&self, Source) -> Result<Perms>;
-    fn has_perm(&self, Source, Perms) -> Result<bool>;
     fn sql(&mut self) -> &Mutex<Connection>;
     fn commands(&self) -> &BTreeMap<String, Command>;
 
@@ -117,9 +139,6 @@ impl<'a> Context<'a> {
         }
 
         Ok(())
-    }
-    pub fn has_perm(&self, flag: Perms) -> Result<bool> {
-        Ok(self.perms()?.contains(flag))
     }
     pub fn perms(&self) -> Result<Perms> {
         self.bot.perms(self.source.clone())

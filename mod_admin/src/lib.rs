@@ -4,27 +4,16 @@ extern crate shared;
 use rusqlite::types::ValueRef::*;
 use rusqlite::NO_PARAMS;
 use shared::prelude::*;
-use std::sync::Arc;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.commandrc("raw", Arc::new(wrap(raw)));
-    meta.commandrc("join", Arc::new(wrap(join)));
-    meta.commandrc("part", Arc::new(wrap(part)));
-    meta.commandrc("q", Arc::new(wrap(query)));
-    meta.command("whoami", whoami);
+    meta.cmd("raw", Command::new(raw).req_perms(Perms::Admin));
+    meta.cmd("join", Command::new(join).req_perms(Perms::Admin));
+    meta.cmd("part", Command::new(part).req_perms(Perms::Admin));
+    meta.cmd("q", Command::new(query).req_perms(Perms::Admin));
+    meta.cmd("whoami", Command::new(whoami));
     meta
-}
-
-fn wrap(f: impl Fn(&mut Context, &str) -> Result<()>) -> impl Fn(&mut Context, &str) -> Result<()> {
-    move |ctx: &mut Context, args| {
-        if ctx.has_perm(Perms::Admin)? {
-            f(ctx, args)
-        } else {
-            ctx.reply("permission denied")
-        }
-    }
 }
 
 fn raw(ctx: &mut Context, args: &str) -> Result<()> {

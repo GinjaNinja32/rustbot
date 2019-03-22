@@ -97,7 +97,7 @@ impl Rustbot {
                 // it's a command!
                 let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
                 if let Some(f) = ctx.bot.commands().get(parts[0]).cloned() {
-                    let result = f(ctx, parts.get(1).unwrap_or(&""));
+                    let result = f.call(ctx, parts.get(1).unwrap_or(&""));
                     result
                         .or_else(|e| ctx.reply(&format!("command failed: {}", e)))
                         .err()
@@ -150,10 +150,6 @@ impl shared::types::Bot for Rustbot {
         }
         self.modules.insert(name.to_string(), m);
         Ok(())
-    }
-
-    fn has_perm(&self, who: Source, what: Perms) -> Result<bool> {
-        Ok(self.perms(who)?.contains(what))
     }
 
     fn perms(&self, who: Source) -> Result<Perms> {

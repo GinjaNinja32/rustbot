@@ -1,28 +1,17 @@
 extern crate shared;
 
 use shared::prelude::*;
-use std::process::Command;
+use std::process::Command as ProcessCommand;
 use std::str;
-use std::sync::Arc;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.commandrc("drop", Arc::new(wrap(drop)));
-    meta.commandrc("load", Arc::new(wrap(load)));
-    meta.commandrc("reload", Arc::new(wrap(reload)));
-    meta.commandrc("recompile", Arc::new(wrap(recompile)));
+    meta.cmd("drop", Command::new(drop));
+    meta.cmd("load", Command::new(load));
+    meta.cmd("reload", Command::new(reload));
+    meta.cmd("recompile", Command::new(recompile));
     meta
-}
-
-fn wrap(f: impl Fn(&mut Context, &str) -> Result<()>) -> impl Fn(&mut Context, &str) -> Result<()> {
-    move |ctx: &mut Context, args| {
-        if ctx.has_perm(Perms::Admin)? {
-            f(ctx, args)
-        } else {
-            ctx.reply("permission denied")
-        }
-    }
 }
 
 fn exec(ctx: &mut Context, args: &str, what: fn(&mut Context, &str) -> Result<()>) -> Result<()> {
@@ -55,7 +44,7 @@ fn reload(ctx: &mut Context, args: &str) -> Result<()> {
 }
 
 fn recompile(ctx: &mut Context, args: &str) -> Result<()> {
-    let mut cmd = Command::new("cargo");
+    let mut cmd = ProcessCommand::new("cargo");
     cmd.arg("build");
     if !cfg!(debug_assertions) {
         cmd.arg("--release");

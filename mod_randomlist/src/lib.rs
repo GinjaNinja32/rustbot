@@ -5,19 +5,27 @@ use shared::prelude::*;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.command("8ball", |ctx, args| randomlist("eightball", ctx, args));
-    meta.command("kitty", |ctx, args| randomlist("kitty", ctx, args));
-    meta.command("fox", |ctx, args| randomlist("fox", ctx, args));
-    meta.command("snek", |ctx, args| randomlist("snek", ctx, args));
-    meta.command("delrand", delrand);
+    meta.cmd(
+        "8ball",
+        Command::new(|ctx, args| randomlist("eightball", ctx, args)),
+    );
+    meta.cmd(
+        "kitty",
+        Command::new(|ctx, args| randomlist("kitty", ctx, args)),
+    );
+    meta.cmd(
+        "fox",
+        Command::new(|ctx, args| randomlist("fox", ctx, args)),
+    );
+    meta.cmd(
+        "snek",
+        Command::new(|ctx, args| randomlist("snek", ctx, args)),
+    );
+    meta.cmd("delrand", Command::new(delrand).req_perms(Perms::Admin));
     meta
 }
 
 fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
-    if !ctx.has_perm(Perms::Admin)? {
-        return ctx.reply("permission denied");
-    }
-
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() != 2 {
         return ctx.reply("usage: delrand <category> <string>");

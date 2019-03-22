@@ -12,7 +12,7 @@ use shared::prelude::*;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.command("weather", weather);
+    meta.cmd("weather", Command::new(weather));
     meta
 }
 
