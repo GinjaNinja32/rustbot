@@ -79,16 +79,12 @@ impl Rustbot {
             let db = ctx.bot.sql().lock().unwrap();
             match ctx.source {
                 IRC { ref config, .. } => db
-                    .query_row(
-                        "SELECT cmdchars FROM irc_config WHERE id = ?",
-                        vec![config],
-                        |row| row.get(0),
-                    )
-                    .unwrap(),
-                Discord { .. } => db
-                    .query_row("SELECT cmdchars FROM dis_config", NO_PARAMS, |row| {
+                    .query_row("SELECT cmdchars FROM irc_config WHERE id = ?", vec![config], |row| {
                         row.get(0)
                     })
+                    .unwrap(),
+                Discord { .. } => db
+                    .query_row("SELECT cmdchars FROM dis_config", NO_PARAMS, |row| row.get(0))
                     .unwrap(),
             }
         };
@@ -144,8 +140,7 @@ impl shared::types::Bot for Rustbot {
         let m = Module { lib };
         let meta = m.get_meta()?;
         for command in meta.commands().iter() {
-            self.commands
-                .insert(command.0.to_string(), (*command.1).clone());
+            self.commands.insert(command.0.to_string(), (*command.1).clone());
         }
         self.modules.insert(name.to_string(), m);
         Ok(())
@@ -265,10 +260,7 @@ pub fn start() -> Result<()> {
         let cid = id.clone();
         conf.channels = db
             .prepare("SELECT channel FROM irc_channels WHERE config_id = ?")
-            .and_then(|mut stmt| {
-                stmt.query_map(vec![cid], |row| row.get(0))
-                    .and_then(|c| c.collect())
-            })
+            .and_then(|mut stmt| stmt.query_map(vec![cid], |row| row.get(0)).and_then(|c| c.collect()))
             .map_err(|e| format!("{}", e))?;
     }
 
@@ -295,8 +287,7 @@ pub fn start() -> Result<()> {
 
     for (id, conf) in configs.iter() {
         println!("{}", id);
-        let client =
-            Arc::new(irc::IrcClient::from_config(conf.clone()).map_err(|e| format!("{}", e))?);
+        let client = Arc::new(irc::IrcClient::from_config(conf.clone()).map_err(|e| format!("{}", e))?);
         client
             .send_cap_req(&[irc::Capability::MultiPrefix])
             .map_err(|e| format!("{}", e))?;
@@ -328,10 +319,8 @@ pub fn start() -> Result<()> {
     let token: String = {
         let b = b.read().unwrap();
         let db = b.db.lock().map_err(|e| format!("{}", e))?;
-        db.query_row("SELECT bot_token FROM dis_config", NO_PARAMS, |row| {
-            row.get(0)
-        })
-        .unwrap()
+        db.query_row("SELECT bot_token FROM dis_config", NO_PARAMS, |row| row.get(0))
+            .unwrap()
     };
     let mut dis = dis::Client::new(&token, DiscordBot { bot: b }).unwrap();
     dis.start()?;

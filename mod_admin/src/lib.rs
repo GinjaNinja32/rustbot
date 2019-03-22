@@ -61,8 +61,7 @@ fn query(ctx: &mut Context, args: &str) -> Result<()> {
         let db = ctx.bot.sql().lock()?;
         let r = db.prepare(args).and_then(|mut stmt| {
             if stmt.column_count() == 0 {
-                db.execute(args, NO_PARAMS)
-                    .map(|n| format!("{} row(s) changed", n))
+                db.execute(args, NO_PARAMS).map(|n| format!("{} row(s) changed", n))
             } else {
                 let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
                 let colstr = format!("({})", cols.join(", "));
@@ -92,17 +91,13 @@ fn query(ctx: &mut Context, args: &str) -> Result<()> {
 fn whoami(ctx: &mut Context, _: &str) -> Result<()> {
     match ctx.source {
         IRC {
-            ref config,
-            ref prefix,
-            ..
+            ref config, ref prefix, ..
         } => {
             if let Some(p) = prefix {
                 ctx.reply(&format!("You are {}:{}", config, p))?;
             }
         }
-        Discord {
-            guild, ref user, ..
-        } => ctx.reply(&format!(
+        Discord { guild, ref user, .. } => ctx.reply(&format!(
             "You are {:?}:{}",
             guild.map(|g| *g.as_u64()),
             user.id.as_u64(),

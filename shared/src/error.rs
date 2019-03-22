@@ -10,9 +10,7 @@ pub struct Error {
 }
 impl Error {
     pub fn new(from: &str) -> Self {
-        Error {
-            msg: from.to_string(),
-        }
+        Error { msg: from.to_string() }
     }
 }
 
@@ -31,9 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<SerenityError> for Error {
     fn from(s: SerenityError) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl From<String> for Error {
@@ -43,43 +39,31 @@ impl From<String> for Error {
 }
 impl From<Box<std::error::Error>> for Error {
     fn from(s: Box<std::error::Error>) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl From<std::io::Error> for Error {
     fn from(s: std::io::Error) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl From<rusqlite::Error> for Error {
     fn from(s: rusqlite::Error) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(s: std::sync::PoisonError<T>) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl From<reqwest::Error> for Error {
     fn from(s: reqwest::Error) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }
 impl From<irc::IrcError> for Error {
     fn from(s: irc::IrcError) -> Self {
-        Error {
-            msg: format!("{}", s),
-        }
+        Error { msg: format!("{}", s) }
     }
 }

@@ -5,22 +5,10 @@ use shared::prelude::*;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.cmd(
-        "8ball",
-        Command::new(|ctx, args| randomlist("eightball", ctx, args)),
-    );
-    meta.cmd(
-        "kitty",
-        Command::new(|ctx, args| randomlist("kitty", ctx, args)),
-    );
-    meta.cmd(
-        "fox",
-        Command::new(|ctx, args| randomlist("fox", ctx, args)),
-    );
-    meta.cmd(
-        "snek",
-        Command::new(|ctx, args| randomlist("snek", ctx, args)),
-    );
+    meta.cmd("8ball", Command::new(|ctx, args| randomlist("eightball", ctx, args)));
+    meta.cmd("kitty", Command::new(|ctx, args| randomlist("kitty", ctx, args)));
+    meta.cmd("fox", Command::new(|ctx, args| randomlist("fox", ctx, args)));
+    meta.cmd("snek", Command::new(|ctx, args| randomlist("snek", ctx, args)));
     meta.cmd("delrand", Command::new(delrand).req_perms(Perms::Admin));
     meta
 }

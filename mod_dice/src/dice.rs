@@ -424,14 +424,12 @@ impl Evaluable for Value {
                 Ok((format!("({})", es), ev))
             }
             Value::Slice(s) => {
-                let r: Result<Vec<(String, EvaluatedValue)>, _> =
-                    s.iter().map(|v| v.eval()).collect();
+                let r: Result<Vec<(String, EvaluatedValue)>, _> = s.iter().map(|v| v.eval()).collect();
                 match r {
                     Err(e) => Err(e),
                     Ok(v) => {
                         let strs: Vec<String> = v.iter().map(|&(ref s, _)| s.clone()).collect();
-                        let vals: Result<Vec<i64>, String> =
-                            v.iter().map(|&(_, ref v)| v.as_i64()).collect();
+                        let vals: Result<Vec<i64>, String> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
                         Ok((format!("[{}]", strs.join(", ")), IntSlice(vals?)))
                     }
                 }
@@ -522,11 +520,7 @@ impl CompareOp {
             CompareOp::Unequal => l != r,
         }
     }
-    fn apply(
-        &self,
-        left: EvaluatedValue,
-        right: EvaluatedValue,
-    ) -> Result<(Option<String>, EvaluatedValue), String> {
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Option<String>, EvaluatedValue), String> {
         let l = match left {
             Integer(v) => Ok(v),
             IntSlice(v) => IntSlice(v).as_i64(),
@@ -590,11 +584,7 @@ fn format_arrays(ac: &str, aa: &[i64], bc: &str, ba: &[i64]) -> String {
 }
 
 impl ModOp {
-    fn apply(
-        &self,
-        left: EvaluatedValue,
-        right: EvaluatedValue,
-    ) -> Result<(String, EvaluatedValue), String> {
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(String, EvaluatedValue), String> {
         let mut l = left.as_int_slice()?;
         l.sort();
         let r = right.as_i64()? as usize;
@@ -602,18 +592,12 @@ impl ModOp {
             ModOp::DropLowest => (format_arrays(RED, &l[..r], YELLOW, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
                 let i = l.len() - r;
-                (
-                    format_arrays(YELLOW, &l[..i], RED, &l[i..]),
-                    &l[..l.len() - r],
-                )
+                (format_arrays(YELLOW, &l[..i], RED, &l[i..]), &l[..l.len() - r])
             }
             ModOp::KeepLowest => (format_arrays(YELLOW, &l[..r], RED, &l[r..]), &l[..r]),
             ModOp::KeepHighest => {
                 let i = l.len() - r;
-                (
-                    format_arrays(RED, &l[..i], YELLOW, &l[i..]),
-                    &l[l.len() - r..],
-                )
+                (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[l.len() - r..])
             }
         };
         Ok((s, IntSlice(result.to_vec())))

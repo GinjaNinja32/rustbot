@@ -121,8 +121,7 @@ impl<'a> Context<'a> {
                 if let Some(ch) = channel {
                     if let Some(User { nick, .. }) = prefix {
                         if *ch == self.bot_name {
-                            self.bot
-                                .irc_send_privmsg(config.as_str(), nick.as_str(), message)?;
+                            self.bot.irc_send_privmsg(config.as_str(), nick.as_str(), message)?;
                         } else {
                             self.bot.irc_send_privmsg(
                                 config.as_str(),
@@ -178,11 +177,7 @@ pub enum Source {
 #[derive(Debug, Clone)]
 pub enum Prefix {
     Server(String),
-    User {
-        nick: String,
-        user: String,
-        host: String,
-    },
+    User { nick: String, user: String, host: String },
 }
 
 impl std::fmt::Display for Prefix {

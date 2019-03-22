@@ -31,13 +31,7 @@ fn migrate() -> Result<(), Box<Error>> {
         .direction(migrant_lib::Direction::Up)
         .all(true)
         .apply()
-        .or_else(|e| {
-            if e.is_migration_complete() {
-                Ok(())
-            } else {
-                Err(e)
-            }
-        })?;
+        .or_else(|e| if e.is_migration_complete() { Ok(()) } else { Err(e) })?;
 
     let config = config.reload()?;
     migrant_lib::list(&config)?;
