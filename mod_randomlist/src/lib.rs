@@ -37,11 +37,14 @@ fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
 fn randomlist(what: &str, ctx: &mut Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() == 2 && parts[0] == "add" {
-        ctx.bot.sql().lock()?.execute(
-            "INSERT INTO mod_randomlist (category, string) VALUES (?, ?)",
+        let n = ctx.bot.sql().lock()?.execute(
+            "INSERT INTO mod_randomlist (category, string) VALUES (?, ?) ON CONFLICT (category, string) DO NOTHING",
             vec![what, parts[1]],
         )?;
-        return ctx.reply("Added");
+        if n == 0 {
+            return ctx.reply("That's already on the list.");
+        }
+        return ctx.reply("Added.");
     }
 
     let s: std::result::Result<Vec<String>, rusqlite::Error> = {
