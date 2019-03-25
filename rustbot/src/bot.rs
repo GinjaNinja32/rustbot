@@ -91,7 +91,7 @@ impl Rustbot {
         if let Some(c) = message.get(0..1) {
             if cmdchars.contains(c) {
                 // it's a command!
-                let parts: Vec<&str> = message[1..].splitn(2, ' ').collect();
+                let parts: Vec<&str> = message[1..].splitn(2, char::is_whitespace).collect();
                 let res = self.commands.read().get(parts[0]).cloned();
                 if let Some(f) = res {
                     let result = f.call(ctx, parts.get(1).unwrap_or(&""));

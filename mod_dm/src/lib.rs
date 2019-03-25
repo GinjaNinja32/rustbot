@@ -35,7 +35,7 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
         }
     }
 
-    let args = args.clone().trim_matches('`');
+    let args = args.clone().trim().trim_matches('`');
 
     let code: String = if args.contains("\n") {
         if args.contains("\nMAIN\n") || args.contains("\nproc/main()\n") || args.contains("\n/proc/main()\n") {

@@ -171,4 +171,11 @@
 
 #define typeid(x) (length("\ref[x]") == 12 ? copytext("\ref[x]", 4, 6) : "0[copytext("\ref[x]", 4, 5)]")
 
+#define STDOUT world.log
+#define LOG world.log
+#define WLOG world.log
+#define OUT world.log
 #define MAIN /proc/main()
+#define TAG_OUT(A,B) world.log << "[#A]: [B]"
+#define ENC_OUT(A) world.log << "[#A] => [enc(A)]"
+#define VAR_OUT(A) ENC_OUT(A)
