@@ -38,8 +38,9 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
     let args = args.clone().trim_matches('`');
 
     let code: String = if args.contains("\n") {
-        format!(
-            r#"
+        if args.contains("\nMAIN\n") || args.contains("\nproc/main()\n") || args.contains("\n/proc/main()\n") {
+            format!(
+                r#"
 #include "util.dm"
 /world/loop_checks = 0
 /world/New()
@@ -47,8 +48,22 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
     del(src)
 {}
 "#,
-            args
-        )
+                args
+            )
+        } else {
+            format!(
+                r#"
+#include "util.dm"
+/world/loop_checks = 0
+/world/New()
+    main()
+    del(src)
+/proc/main()
+    {}
+"#,
+                args.replace("\n", "\n    ")
+            )
+        }
     } else {
         let (pre, main) = {
             let parts: Vec<&str> = args.splitn(2, ";;;").collect();

@@ -170,3 +170,5 @@
 	return L
 
 #define typeid(x) (length("\ref[x]") == 12 ? copytext("\ref[x]", 4, 6) : "0[copytext("\ref[x]", 4, 5)]")
+
+#define MAIN /proc/main()
