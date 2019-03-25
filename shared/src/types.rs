@@ -40,7 +40,7 @@ impl rusqlite::types::FromSql for Perms {
     }
 }
 
-pub type CommandFn = Fn(&mut Context, &str) -> Result<()> + Send + Sync;
+pub type CommandFn = Fn(&Context, &str) -> Result<()> + Send + Sync;
 #[derive(Clone)]
 pub struct Command {
     pub function: Arc<CommandFn>,
@@ -48,7 +48,7 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new(f: fn(&mut Context, &str) -> Result<()>) -> Self {
+    pub fn new(f: fn(&Context, &str) -> Result<()>) -> Self {
         Self::arc(Arc::new(f))
     }
     pub fn arc(f: Arc<CommandFn>) -> Self {
@@ -57,12 +57,12 @@ impl Command {
             req_perms: Perms::None,
         };
     }
-    pub fn req_perms(&mut self, p: Perms) -> Self {
+    pub fn req_perms(&self, p: Perms) -> Self {
         let mut s = self.clone();
         s.req_perms.insert(p);
         s
     }
-    pub fn call(&self, ctx: &mut Context, args: &str) -> Result<()> {
+    pub fn call(&self, ctx: &Context, args: &str) -> Result<()> {
         if !ctx.perms()?.contains(self.req_perms) {
             return ctx.reply("permission denied");
         }

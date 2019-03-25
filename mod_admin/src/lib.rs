@@ -16,11 +16,11 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn raw(ctx: &mut Context, args: &str) -> Result<()> {
+fn raw(ctx: &Context, args: &str) -> Result<()> {
     ctx.irc_send_raw(args)
 }
 
-fn join(ctx: &mut Context, args: &str) -> Result<()> {
+fn join(ctx: &Context, args: &str) -> Result<()> {
     let cfg_id = {
         match ctx.source {
             IRC { ref config, .. } => config.clone(),
@@ -38,7 +38,7 @@ fn join(ctx: &mut Context, args: &str) -> Result<()> {
     ctx.reply("done")
 }
 
-fn part(ctx: &mut Context, args: &str) -> Result<()> {
+fn part(ctx: &Context, args: &str) -> Result<()> {
     let cfg_id = {
         match ctx.source {
             IRC { ref config, .. } => config.clone(),
@@ -56,7 +56,7 @@ fn part(ctx: &mut Context, args: &str) -> Result<()> {
     ctx.reply("done")
 }
 
-fn query(ctx: &mut Context, args: &str) -> Result<()> {
+fn query(ctx: &Context, args: &str) -> Result<()> {
     let result: String = {
         let db = ctx.bot.sql().lock();
         let r = db.prepare(args).and_then(|mut stmt| {
@@ -88,7 +88,7 @@ fn query(ctx: &mut Context, args: &str) -> Result<()> {
     ctx.reply(result.as_str())
 }
 
-fn whoami(ctx: &mut Context, _: &str) -> Result<()> {
+fn whoami(ctx: &Context, _: &str) -> Result<()> {
     match ctx.source {
         IRC {
             ref config, ref prefix, ..

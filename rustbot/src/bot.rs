@@ -51,7 +51,7 @@ impl Rustbot {
                 prefix: self.irc_parse_prefix(irc_msg.prefix),
                 channel: Some(channel),
             };
-            let ctx = &mut Context {
+            let ctx = &Context {
                 bot: self,
                 source: source,
                 bot_name: bot_name.to_string(),
@@ -61,7 +61,7 @@ impl Rustbot {
     }
 
     fn dis_incoming(&self, msg: channel::Message) {
-        let ctx = &mut Context {
+        let ctx = &Context {
             bot: self,
             source: Discord {
                 user: msg.author,
@@ -74,7 +74,7 @@ impl Rustbot {
         Rustbot::handle(self, ctx, msg.content.as_str());
     }
 
-    fn handle(&self, ctx: &mut Context, message: &str) {
+    fn handle(&self, ctx: &Context, message: &str) {
         let cmdchars: String = {
             let db = ctx.bot.sql().lock();
             match ctx.source {

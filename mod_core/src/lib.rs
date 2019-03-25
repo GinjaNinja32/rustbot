@@ -14,7 +14,7 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn exec(ctx: &mut Context, args: &str, what: fn(&mut Context, &str) -> Result<()>) -> Result<()> {
+fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Result<()> {
     for m in args.split(' ') {
         if m == "core" {
             ctx.reply("skipping core")?;
@@ -28,22 +28,22 @@ fn exec(ctx: &mut Context, args: &str, what: fn(&mut Context, &str) -> Result<()
     ctx.reply("done")
 }
 
-fn drop(ctx: &mut Context, args: &str) -> Result<()> {
+fn drop(ctx: &Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| ctx.bot.drop_module(m))
 }
 
-fn load(ctx: &mut Context, args: &str) -> Result<()> {
+fn load(ctx: &Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| ctx.bot.load_module(m))
 }
 
-fn reload(ctx: &mut Context, args: &str) -> Result<()> {
+fn reload(ctx: &Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| {
         ctx.bot.drop_module(m)?;
         ctx.bot.load_module(m)
     })
 }
 
-fn recompile(ctx: &mut Context, args: &str) -> Result<()> {
+fn recompile(ctx: &Context, args: &str) -> Result<()> {
     let mut cmd = ProcessCommand::new("cargo");
     cmd.arg("build");
     if !cfg!(debug_assertions) {

@@ -13,7 +13,7 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
+fn delrand(ctx: &Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() != 2 {
         return ctx.reply("usage: delrand <category> <string>");
@@ -30,7 +30,7 @@ fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
     }
 }
 
-fn randomlist(what: &str, ctx: &mut Context, args: &str) -> Result<()> {
+fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() == 2 && parts[0] == "add" {
         let n = ctx.bot.sql().lock().execute(

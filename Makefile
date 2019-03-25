@@ -25,7 +25,7 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn foo(ctx: &mut Context, args: &str) -> Result<()> {
+fn foo(ctx: &Context, args: &str) -> Result<()> {
 	Ok(())
 }
 endef

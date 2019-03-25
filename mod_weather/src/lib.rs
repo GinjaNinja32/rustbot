@@ -16,7 +16,7 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn weather(ctx: &mut Context, args: &str) -> Result<()> {
+fn weather(ctx: &Context, args: &str) -> Result<()> {
     let appid: String = ctx
         .bot
         .sql()

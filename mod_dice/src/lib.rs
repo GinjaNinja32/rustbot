@@ -14,7 +14,7 @@ pub fn get_meta() -> Meta {
     meta
 }
 
-fn cmd_dice(ctx: &mut Context, args: &str) -> Result<()> {
+fn cmd_dice(ctx: &Context, args: &str) -> Result<()> {
     let v = dice::parse(args)?;
     let result = dice::eval(v)?;
     ctx.reply(result.as_str())
