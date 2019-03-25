@@ -16,7 +16,7 @@ pub fn get_meta() -> Meta {
 fn delrand(ctx: &Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() != 2 {
-        return ctx.reply("usage: delrand <category> <string>");
+        return ctx.say("usage: delrand <category> <string>");
     }
 
     let n = ctx.bot.sql().lock().execute(
@@ -24,9 +24,9 @@ fn delrand(ctx: &Context, args: &str) -> Result<()> {
         vec![parts[0], parts[1]],
     )?;
     if n != 1 {
-        ctx.reply(&format!("{} rows removed", n))
+        ctx.say(&format!("{} rows removed", n))
     } else {
-        ctx.reply(&format!("done"))
+        ctx.say(&format!("done"))
     }
 }
 
@@ -38,9 +38,9 @@ fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
             vec![what, parts[1]],
         )?;
         if n == 0 {
-            return ctx.reply("That's already on the list.");
+            return ctx.say("That's already on the list.");
         }
-        return ctx.reply("Added.");
+        return ctx.say("Added.");
     }
 
     let s: std::result::Result<Vec<String>, rusqlite::Error> = {
@@ -54,8 +54,8 @@ fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
     };
 
     match s?.get(0) {
-        Some(s) => ctx.reply(s)?,
-        None => ctx.reply(&format!("I don't have anything to give you for '{}'", what))?,
+        Some(s) => ctx.say(s)?,
+        None => ctx.say(&format!("I don't have anything to give you for '{}'", what))?,
     }
 
     Ok(())

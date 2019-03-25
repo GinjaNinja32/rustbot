@@ -31,8 +31,8 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
 
     match result.status().as_u16() {
         200 => (),
-        404 => return ctx.reply("could not find location"),
-        code => return ctx.reply(&format!("error {}", code)),
+        404 => return ctx.say("could not find location"),
+        code => return ctx.say(&format!("error {}", code)),
     }
 
     let data: Response = result.json()?;
@@ -52,7 +52,7 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         text_for_angle(data.wind.deg)
     );
     let pressure = format!("{:.0} mb", data.main.pressure);
-    ctx.reply(&format!(
+    ctx.say(&format!(
         "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
         location,
         timestamp,

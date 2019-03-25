@@ -96,7 +96,7 @@ impl Rustbot {
                 if let Some(f) = res {
                     let result = f.call(ctx, parts.get(1).unwrap_or(&""));
                     result
-                        .or_else(|e| ctx.reply(&format!("command failed: {}", e)))
+                        .or_else(|e| ctx.say(&format!("command failed: {}", e)))
                         .err()
                         .map(|e| println!("failed to handle error: {}", e));
                 }

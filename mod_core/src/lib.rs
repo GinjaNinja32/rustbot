@@ -17,15 +17,15 @@ pub fn get_meta() -> Meta {
 fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Result<()> {
     for m in args.split(' ') {
         if m == "core" {
-            ctx.reply("skipping core")?;
+            ctx.say("skipping core")?;
             continue;
         }
         match what(ctx, m) {
             Ok(()) => Ok(()),
-            Err(e) => ctx.reply(&format!("{} failed: {}", m, e)),
+            Err(e) => ctx.say(&format!("{} failed: {}", m, e)),
         }?;
     }
-    ctx.reply("done")
+    ctx.say("done")
 }
 
 fn drop(ctx: &Context, args: &str) -> Result<()> {
@@ -55,7 +55,8 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
             if result.status.success() {
                 reload(ctx, args)
             } else {
-                ctx.reply("compile failed:")?;
+                // ctx.say("compile failed:")?;
+                let mut lines: Vec<&str> = vec![];
                 for line in str::from_utf8(&result.stderr).unwrap().split('\n') {
                     if line.starts_with("   Compiling") {
                         continue;
@@ -63,11 +64,11 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
                     if line == "" {
                         break;
                     }
-                    ctx.reply(line)?;
+                    lines.push(line);
                 }
-                Ok(())
+                ctx.reply(Message::Code(lines.join("\n")))
             }
         }
-        Err(e) => ctx.reply(&format!("failed to run build: {}", e)),
+        Err(e) => ctx.say(&format!("failed to run build: {}", e)),
     }
 }

@@ -35,7 +35,7 @@ fn join(ctx: &Context, args: &str) -> Result<()> {
         )?;
     }
     ctx.irc_send_raw(&format!("JOIN {}", args))?;
-    ctx.reply("done")
+    ctx.say("done")
 }
 
 fn part(ctx: &Context, args: &str) -> Result<()> {
@@ -53,7 +53,7 @@ fn part(ctx: &Context, args: &str) -> Result<()> {
         )?;
     }
     ctx.irc_send_raw(&format!("part {}", args))?;
-    ctx.reply("done")
+    ctx.say("done")
 }
 
 fn query(ctx: &Context, args: &str) -> Result<()> {
@@ -85,7 +85,7 @@ fn query(ctx: &Context, args: &str) -> Result<()> {
         });
         r?
     };
-    ctx.reply(result.as_str())
+    ctx.say(result.as_str())
 }
 
 fn whoami(ctx: &Context, _: &str) -> Result<()> {
@@ -94,14 +94,20 @@ fn whoami(ctx: &Context, _: &str) -> Result<()> {
             ref config, ref prefix, ..
         } => {
             if let Some(p) = prefix {
-                ctx.reply(&format!("You are {}:{}", config, p))?;
+                ctx.reply(Message::Simple(format!(
+                    "You are {}:{}\nFlags: {}",
+                    config,
+                    p,
+                    ctx.perms()?
+                )))?;
             }
         }
-        Discord { guild, ref user, .. } => ctx.reply(&format!(
-            "You are {:?}:{}",
+        Discord { guild, ref user, .. } => ctx.reply(Message::Simple(format!(
+            "You are {:?}:{}\nFlags: {}",
             guild.map(|g| *g.as_u64()),
             user.id.as_u64(),
-        ))?,
+            ctx.perms()?
+        )))?,
     }
-    ctx.reply(&format!("Flags: {}", ctx.perms()?))
+    Ok(())
 }

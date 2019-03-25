@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serenity::model::prelude as serenity;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use types::Message::*;
 use types::Prefix::*;
 use types::Source::*;
 
@@ -64,7 +65,7 @@ impl Command {
     }
     pub fn call(&self, ctx: &Context, args: &str) -> Result<()> {
         if !ctx.perms()?.contains(self.req_perms) {
-            return ctx.reply("permission denied");
+            return ctx.say("permission denied");
         }
 
         (self.function)(ctx, args)
@@ -105,8 +106,59 @@ pub struct Context<'a> {
     pub bot_name: String,
 }
 
+pub enum Message {
+    Simple(String),
+    Code(String),
+}
+
+fn paste_max_lines(input: String, max_lines: usize) -> Result<(Vec<String>, Option<String>)> {
+    let lines: Vec<String> = input.split("\n").map(|l| l.to_string()).collect();
+    if lines.len() > max_lines {
+        let client = reqwest::Client::new();
+        let mut result = client.post("http://ix.io").form(&[("f:1", input)]).send()?;
+
+        let url = result.text()?;
+
+        Ok((
+            lines[0..max_lines - 1].to_vec(),
+            Some(format!("[full message: {}]", url.trim())),
+        ))
+    } else {
+        Ok((lines, None))
+    }
+}
+
+impl Message {
+    fn format_irc(self) -> Result<Vec<String>> {
+        match self {
+            Simple(s) | Code(s) => match paste_max_lines(s, 3)? {
+                (lines, None) => Ok(lines),
+                (mut lines, Some(extra)) => {
+                    lines.push(extra);
+                    Ok(lines)
+                }
+            },
+        }
+    }
+    fn format_discord(self) -> Result<String> {
+        match self {
+            Simple(s) => match paste_max_lines(s, 11)? {
+                (lines, None) => Ok(lines.join("\n")),
+                (lines, Some(extra)) => Ok(format!("{}\n{}", lines.join("\n"), extra)),
+            },
+            Code(s) => match paste_max_lines(s, 11)? {
+                (lines, None) => Ok(format!("```\n{}\n```", lines.join("\n"))),
+                (lines, Some(extra)) => Ok(format!("```\n{}\n```{}", lines.join("\n"), extra)),
+            },
+        }
+    }
+}
+
 impl<'a> Context<'a> {
-    pub fn reply(&self, message: &str) -> Result<()> {
+    pub fn say(&self, message: &str) -> Result<()> {
+        self.reply(Message::Simple(message.to_string()))
+    }
+    pub fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
             IRC {
                 config,
@@ -116,19 +168,24 @@ impl<'a> Context<'a> {
                 if let Some(ch) = channel {
                     if let Some(User { nick, .. }) = prefix {
                         if *ch == self.bot_name {
-                            self.bot.irc_send_privmsg(config.as_str(), nick.as_str(), message)?;
+                            for msg in message.format_irc()? {
+                                self.bot
+                                    .irc_send_privmsg(config.as_str(), nick.as_str(), msg.as_str())?;
+                            }
                         } else {
-                            self.bot.irc_send_privmsg(
-                                config.as_str(),
-                                ch.as_str(),
-                                &format!("{}: {}", nick.as_str(), message),
-                            )?;
+                            for msg in message.format_irc()? {
+                                self.bot.irc_send_privmsg(
+                                    config.as_str(),
+                                    ch.as_str(),
+                                    &format!("{}: {}", nick.as_str(), msg.as_str()),
+                                )?;
+                            }
                         }
                     }
                 }
             }
             Discord { channel, .. } => {
-                channel.say(message).map(|_| ())?;
+                channel.say(message.format_discord()?).map(|_| ())?;
             }
         }
 

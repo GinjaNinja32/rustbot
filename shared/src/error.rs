@@ -37,6 +37,16 @@ impl From<String> for Error {
         Error { msg: s.clone() }
     }
 }
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(s: std::string::FromUtf8Error) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
+impl From<std::str::Utf8Error> for Error {
+    fn from(s: std::str::Utf8Error) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
 impl From<Box<std::error::Error>> for Error {
     fn from(s: Box<std::error::Error>) -> Self {
         Error { msg: format!("{}", s) }
