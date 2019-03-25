@@ -28,7 +28,7 @@ fn join(ctx: &mut Context, args: &str) -> Result<()> {
         }
     };
     {
-        let db = ctx.bot.sql().lock().unwrap();
+        let db = ctx.bot.sql().lock();
         db.execute(
             "INSERT INTO irc_channels (channel, config_id) VALUES (?, ?) ON CONFLICT (channel, config_id) DO NOTHING",
             vec![args, cfg_id.as_str()],
@@ -46,7 +46,7 @@ fn part(ctx: &mut Context, args: &str) -> Result<()> {
         }
     };
     {
-        let db = ctx.bot.sql().lock().unwrap();
+        let db = ctx.bot.sql().lock();
         db.execute(
             "DELETE FROM irc_channels WHERE channel = ? AND config_id = ?",
             vec![args, cfg_id.as_str()],
@@ -58,7 +58,7 @@ fn part(ctx: &mut Context, args: &str) -> Result<()> {
 
 fn query(ctx: &mut Context, args: &str) -> Result<()> {
     let result: String = {
-        let db = ctx.bot.sql().lock()?;
+        let db = ctx.bot.sql().lock();
         let r = db.prepare(args).and_then(|mut stmt| {
             if stmt.column_count() == 0 {
                 db.execute(args, NO_PARAMS).map(|n| format!("{} row(s) changed", n))

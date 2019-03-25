@@ -19,7 +19,7 @@ fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
         return ctx.reply("usage: delrand <category> <string>");
     }
 
-    let n = ctx.bot.sql().lock()?.execute(
+    let n = ctx.bot.sql().lock().execute(
         "DELETE FROM mod_randomlist WHERE category = ? AND string = ?",
         vec![parts[0], parts[1]],
     )?;
@@ -33,7 +33,7 @@ fn delrand(ctx: &mut Context, args: &str) -> Result<()> {
 fn randomlist(what: &str, ctx: &mut Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() == 2 && parts[0] == "add" {
-        let n = ctx.bot.sql().lock()?.execute(
+        let n = ctx.bot.sql().lock().execute(
             "INSERT INTO mod_randomlist (category, string) VALUES (?, ?) ON CONFLICT (category, string) DO NOTHING",
             vec![what, parts[1]],
         )?;
@@ -44,7 +44,7 @@ fn randomlist(what: &str, ctx: &mut Context, args: &str) -> Result<()> {
     }
 
     let s: std::result::Result<Vec<String>, rusqlite::Error> = {
-        let db = ctx.bot.sql().lock()?;
+        let db = ctx.bot.sql().lock();
         let r = db
             .prepare("SELECT string FROM mod_randomlist WHERE category = ? LIMIT ( ABS(RANDOM()) % MAX((SELECT COUNT(*) FROM mod_randomlist WHERE category = ?), 1) ), 1").and_then(|mut stmt| {
                 stmt.query_map(vec![what, what], |row| row.get(0))?

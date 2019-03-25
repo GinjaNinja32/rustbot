@@ -1,12 +1,12 @@
 #![allow(non_upper_case_globals)]
 
 use error::*;
+use parking_lot::Mutex;
 use rusqlite::types::{FromSqlError, ValueRef};
 use rusqlite::Connection;
 use serenity::model::prelude as serenity;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use types::Prefix::*;
 use types::Source::*;
 
@@ -90,21 +90,17 @@ impl Meta {
 }
 
 pub trait Bot {
-    fn load_module(&mut self, &str) -> Result<()>;
-    fn drop_module(&mut self, &str) -> Result<()>;
+    fn load_module(&self, &str) -> Result<()>;
+    fn drop_module(&self, &str) -> Result<()>;
     fn perms(&self, Source) -> Result<Perms>;
-    fn sql(&mut self) -> &Mutex<Connection>;
-    fn commands(&self) -> &BTreeMap<String, Command>;
+    fn sql(&self) -> &Mutex<Connection>;
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;
-
-    // Internal
-    //fn handle(&mut self, ctx: &mut Context, msg: &str);
 }
 
 pub struct Context<'a> {
-    pub bot: &'a mut Bot,
+    pub bot: &'a (Bot + Sync),
     pub source: Source,
     pub bot_name: String,
 }
@@ -150,7 +146,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn irc_send_raw(&mut self, msg: &str) -> Result<()> {
+    pub fn irc_send_raw(&self, msg: &str) -> Result<()> {
         if let IRC { ref config, .. } = self.source {
             self.bot.irc_send_raw(config.as_str(), msg)
         } else {

@@ -17,10 +17,11 @@ pub fn get_meta() -> Meta {
 }
 
 fn weather(ctx: &mut Context, args: &str) -> Result<()> {
-    let appid: String = {
-        let db = ctx.bot.sql().lock()?;
-        db.query_row("SELECT appid FROM mod_weather_config", NO_PARAMS, |row| row.get(0))?
-    };
+    let appid: String = ctx
+        .bot
+        .sql()
+        .lock()
+        .query_row("SELECT appid FROM mod_weather_config", NO_PARAMS, |row| row.get(0))?;
     let params = [("q", args), ("APPID", appid.as_str())];
     let client = reqwest::Client::new();
     let mut result = client

@@ -12,3 +12,4 @@ serenity = "0.5"
 rusqlite = { version = "0.16.0", features = ["bundled"] }
 reqwest = "0.9.11"
 bitflags = "1.0.4"
+parking_lot = { version = "0.7", features = ["deadlock_detection"] }
