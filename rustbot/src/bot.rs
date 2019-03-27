@@ -275,38 +275,38 @@ pub fn start() -> Result<()> {
         }
     }
 
-    for (id, conf) in configs.iter() {
-        println!("{}", id);
-        let client = Arc::new(irc::IrcClient::from_config(conf.clone())?);
-        client.send_cap_req(&[irc::Capability::MultiPrefix])?;
-        client.identify()?;
-
-        {
-            b.clients.write().insert(id.clone(), client.clone());
-        }
-    }
-
     for (id, conf) in configs {
         let b = b.clone();
         thread::Builder::new()
             .name(format!(
                 "IRC: {} ({}:{})",
                 id,
-                conf.server.expect("a non-None server address"),
+                conf.server.clone().expect("a non-None server address"),
                 conf.port.expect("a non-None server port")
             ))
-            .spawn(move || {
-                let client = { b.clients.read().get(&id).unwrap().clone() };
-                client
-                    .for_each_incoming(|irc_msg| {
+            .spawn(move || loop {
+                let f: &Fn() -> Result<()> = &|| {
+                    let client = Arc::new(irc::IrcClient::from_config(conf.clone())?);
+                    client.send_cap_req(&[irc::Capability::MultiPrefix])?;
+                    client.identify()?;
+                    b.clients.write().insert(id.clone(), client.clone());
+                    client.for_each_incoming(|irc_msg| {
                         let b = b.clone();
                         let id = id.clone();
                         rayon::spawn(move || {
                             let client = { b.clients.read().get(&id).unwrap().clone() };
                             b.irc_incoming(id.clone(), client.current_nickname(), irc_msg);
                         });
-                    })
-                    .unwrap();
+                    })?;
+                    Ok(())
+                };
+                match f() {
+                    Ok(()) => (),
+                    Err(e) => {
+                        println!("{}: server connection failed: {}", id, e);
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                    }
+                }
             })?;
     }
 
