@@ -365,6 +365,10 @@ impl DiceRoll {
                     None => ("".to_string(), vec![1, 2, 3, 4, 5, 6]),
                 };
 
+                if s.is_empty() {
+                    return Err("tried to roll a die with no options".to_string());
+                }
+
                 let mut n = c as usize;
                 let target = match e {
                     None => None,
