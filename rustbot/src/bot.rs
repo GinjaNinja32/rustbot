@@ -11,6 +11,7 @@ use shared::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
@@ -109,6 +110,7 @@ impl Rustbot {
 impl shared::types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
         if let Some(m) = self.modules.write().remove(name) {
+            println!("drop module: {}", name);
             let db = self.db.lock();
             db
                 .execute(
@@ -127,6 +129,7 @@ impl shared::types::Bot for Rustbot {
     }
 
     fn load_module(&self, name: &str) -> Result<()> {
+        println!("load module: {}", name);
         let libpath = if cfg!(debug_assertions) {
             format!("libmod_{}.so", name)
         } else {
@@ -278,18 +281,14 @@ pub fn start() -> Result<()> {
     for (id, conf) in configs {
         let b = b.clone();
         thread::Builder::new()
-            .name(format!(
-                "IRC: {} ({}:{})",
-                id,
-                conf.server.clone().expect("a non-None server address"),
-                conf.port.expect("a non-None server port")
-            ))
-            .spawn(move || loop {
-                let f: &Fn() -> Result<()> = &|| {
+            .name(format!("IRC: {}", irc_descriptor(id.as_str(), &conf)))
+            .spawn(move || {
+                run_with_backoff(&format!("IRC connection for {}", id), &|| {
                     let client = Arc::new(irc::IrcClient::from_config(conf.clone())?);
                     client.send_cap_req(&[irc::Capability::MultiPrefix])?;
                     client.identify()?;
                     b.clients.write().insert(id.clone(), client.clone());
+                    println!("connect: {}", irc_descriptor(id.as_str(), &conf));
                     client.for_each_incoming(|irc_msg| {
                         let b = b.clone();
                         let id = id.clone();
@@ -299,14 +298,7 @@ pub fn start() -> Result<()> {
                         });
                     })?;
                     Ok(())
-                };
-                match f() {
-                    Ok(()) => (),
-                    Err(e) => {
-                        println!("{}: server connection failed: {}", id, e);
-                        std::thread::sleep(std::time::Duration::from_secs(5));
-                    }
-                }
+                });
             })?;
     }
 
@@ -315,9 +307,45 @@ pub fn start() -> Result<()> {
             .query_row("SELECT bot_token FROM dis_config", NO_PARAMS, |row| row.get(0))
             .unwrap()
     };
-    let mut dis = dis::Client::new(&token, DiscordBot { bot: b }).unwrap();
-    dis.start()?;
+    run_with_backoff("Discord connection", &|| {
+        let mut dis = dis::Client::new(&token, DiscordBot { bot: b.clone() }).unwrap();
+        println!("connect: discord");
+        dis.start()?;
+        Ok(())
+    });
     Ok(())
+}
+
+fn run_with_backoff(desc: &str, f: &Fn() -> Result<()>) {
+    let backoff_durations: &[u64] = &[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+    let mut b = 0; // current backoff level
+    loop {
+        let start = Instant::now();
+        match f() {
+            Ok(()) => return,
+            Err(e) => println!("{} failed: {}", desc, e),
+        }
+
+        if start.elapsed() > Duration::from_secs(60) {
+            // if we ran for at least a minute, reset the backoff
+            b = 0;
+        }
+
+        thread::sleep(Duration::from_secs(backoff_durations[b]));
+        if b + 1 < backoff_durations.len() {
+            // if we can escalate the backoff, do so
+            b += 1;
+        }
+    }
+}
+
+fn irc_descriptor(id: &str, conf: &irc::Config) -> String {
+    format!(
+        "{} ({}:{})",
+        id,
+        conf.server.clone().expect("a non-None server address"),
+        conf.port.expect("a non-None server port")
+    )
 }
 
 struct DiscordBot {
