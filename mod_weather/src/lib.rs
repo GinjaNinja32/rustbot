@@ -45,8 +45,6 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         Ok(v) => v,
     };
 
-    println!("{}", text);
-
     let location = format!("{}, {}", data.name, data.sys.country);
     let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
     let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
