@@ -74,8 +74,8 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
             }
         };
 
-        let pre_lines: Vec<&str> = pre.split(";;").collect();
-        let main_lines: Vec<&str> = main.split(";;").collect();
+        let pre_lines: Vec<&str> = pre.split(";;").map(str::trim).collect();
+        let main_lines: Vec<&str> = main.split(";;").map(str::trim).collect();
         let setup = &main_lines[0..main_lines.len() - 1];
 
         let mut value = main_lines[main_lines.len() - 1].to_string();
@@ -116,7 +116,12 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
 
     let stdout = String::from_utf8(result.stdout)?;
     if stdout == "" {
-        ctx.say("<no output>")
+        let stderr = String::from_utf8(result.stderr)?;
+        if stderr == "" {
+            ctx.say("<no output>")
+        } else {
+            ctx.reply(Message::Code(stderr))
+        }
     } else {
         ctx.reply(Message::Code(stdout))
     }
