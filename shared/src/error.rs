@@ -1,5 +1,4 @@
 use irc::error as irc;
-use reqwest;
 use serenity::prelude::*;
 use std::fmt;
 use std::fmt::Display;
@@ -74,6 +73,11 @@ impl From<reqwest::Error> for Error {
 }
 impl From<irc::IrcError> for Error {
     fn from(s: irc::IrcError) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
+impl From<serde_json::Error> for Error {
+    fn from(s: serde_json::Error) -> Self {
         Error { msg: format!("{}", s) }
     }
 }

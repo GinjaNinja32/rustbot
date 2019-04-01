@@ -2,6 +2,7 @@ extern crate chrono;
 extern crate reqwest;
 extern crate rusqlite;
 extern crate serde_derive;
+extern crate serde_json;
 extern crate shared;
 
 use chrono::NaiveDateTime;
@@ -35,7 +36,16 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         code => return ctx.say(&format!("error {}", code)),
     }
 
-    let data: Response = result.json()?;
+    let text = result.text()?;
+    let data: Response = match serde_json::from_str(&text) {
+        Err(e) => {
+            println!("failed to unmarshal weather: {}:\n{}", e, text);
+            return Err(e.into());
+        }
+        Ok(v) => v,
+    };
+
+    println!("{}", text);
 
     let location = format!("{}, {}", data.name, data.sys.country);
     let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
@@ -45,11 +55,18 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         data.main.temp - 273.15,
         ((data.main.temp - 273.15) * 9.0 / 5.0) + 32.0
     );
+    let direction = {
+        match data.wind.deg {
+            None => "".to_string(),
+            Some(d) => format!(" from the {}", text_for_angle(d)),
+        }
+    };
+
     let wind = format!(
-        "{:.0} mph ({:.0} kph) from the {}",
+        "{:.0} mph ({:.0} kph){}",
         data.wind.speed * 2.23694,
         data.wind.speed * 3.6,
-        text_for_angle(data.wind.deg)
+        direction,
     );
     let pressure = format!("{:.0} mb", data.main.pressure);
     ctx.say(&format!(
@@ -126,7 +143,7 @@ struct Weather {
 
 #[derive(Debug, Deserialize)]
 struct Wind {
-    deg: f64,
+    deg: Option<f64>,
     gust: Option<f64>,
     speed: f64,
 }
