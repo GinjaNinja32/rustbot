@@ -9,6 +9,8 @@ pub fn get_meta() -> Meta {
     meta.cmd("kitty", Command::new(|ctx, args| randomlist("kitty", ctx, args)));
     meta.cmd("fox", Command::new(|ctx, args| randomlist("fox", ctx, args)));
     meta.cmd("snek", Command::new(|ctx, args| randomlist("snek", ctx, args)));
+    meta.cmd("otter", Command::new(|ctx, args| randomlist("otter", ctx, args)));
+    meta.cmd("doggo", Command::new(|ctx, args| randomlist("doggo", ctx, args)));
     meta.cmd("delrand", Command::new(delrand).req_perms(Perms::Admin));
     meta
 }
