@@ -25,11 +25,12 @@ if [[ $2 == "run" ]]; then
 	exit 0
 fi
 
+if [[ ! -e external/byondsetup ]]; then
+	echo "command requires setup, see external/README.md"
+	exit 0
+fi
+. external/byondsetup
 cd dm/
-
-export BYOND_SYSTEM=/home/nyx/byond/lin/use
-export PATH=$BYOND_SYSTEM/bin:$PATH
-export LD_LIBRARY_PATH=$BYOND_SYSTEM/bin:$LD_LIBRARY_PATH
 
 output=$($timeout DreamMaker "$file.dme" 2>&1)
 return=$?
