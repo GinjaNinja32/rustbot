@@ -45,4 +45,4 @@ else
 	fi
 fi
 
-rm "$file".*
+[[ -e "$file.dme" ]] && rm "$file".*
