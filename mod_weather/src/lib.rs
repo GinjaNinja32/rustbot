@@ -1,13 +1,13 @@
 extern crate chrono;
 extern crate reqwest;
 extern crate rusqlite;
-extern crate serde_derive;
+extern crate serde;
 extern crate serde_json;
 extern crate shared;
 
 use chrono::NaiveDateTime;
 use rusqlite::NO_PARAMS;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use shared::prelude::*;
 
 #[no_mangle]

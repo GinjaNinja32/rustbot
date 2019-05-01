@@ -4,7 +4,11 @@ use irc::client::prelude as irc;
 use irc::client::prelude::Client;
 use libloading::{Library, Symbol};
 use parking_lot::{Mutex, RwLock};
+use regex::Regex;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{Connection, NO_PARAMS};
+use serde::Deserialize;
+use serde_json;
 use serenity::model::channel;
 use serenity::prelude as dis;
 use shared::prelude::*;
@@ -76,6 +80,17 @@ impl Rustbot {
     }
 
     fn handle(&self, ctx: &Context, message: &str) {
+        match self.handle_inner(ctx, message) {
+            Ok(()) => (),
+            Err(err) => {
+                ctx.say(&format!("command failed: {}", err))
+                    .err()
+                    .map(|e| println!("failed to handle error: {}", e));
+            }
+        }
+    }
+
+    fn handle_inner(&self, ctx: &Context, message: &str) -> Result<()> {
         let cmdchars: String = {
             let db = ctx.bot.sql().lock();
             match ctx.source {
@@ -93,17 +108,127 @@ impl Rustbot {
             if cmdchars.contains(c) {
                 // it's a command!
                 let parts: Vec<&str> = message[1..].splitn(2, char::is_whitespace).collect();
-                let res = self.commands.read().get(parts[0]).cloned();
+
+                let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
+
+                let res = self.commands.read().get(&cmd).cloned();
                 if let Some(f) = res {
-                    let result = f.call(ctx, parts.get(1).unwrap_or(&""));
-                    result
-                        .or_else(|e| ctx.say(&format!("command failed: {}", e)))
-                        .err()
-                        .map(|e| println!("failed to handle error: {}", e));
+                    return f.call(ctx, &args);
                 }
-                return;
+                return Ok(());
             }
         }
+
+        Ok(())
+    }
+
+    fn resolve_alias(&self, cmd: &str, args: &str) -> Result<(String, String)> {
+        let (newcmd, transforms): (String, ArgumentTransforms) = {
+            let db = self.sql().lock();
+            db.query_row(
+                "WITH resolve(depth, name, transform) AS (
+                    SELECT 0, ?, null
+                    UNION ALL SELECT resolve.depth + 1, aliases.target, aliases.transform
+                              FROM aliases, resolve
+                              WHERE aliases.name = resolve.name
+                )
+                SELECT max(depth), name, json_remove(json_group_array(json(transform)), '$[0]')
+                FROM resolve",
+                vec![cmd],
+                |row| (row.get(1), row.get(2)),
+            )?
+        };
+
+        let mut args = args.to_string();
+        for transform in transforms.iter() {
+            match transform {
+                RegexReplace { find, replace, global } => {
+                    let re = Regex::new(find)?;
+                    args = re
+                        .replacen(
+                            args.as_str(),
+                            if global.unwrap_or(false) { 0 } else { 1 },
+                            replace.as_str(),
+                        )
+                        .into_owned();
+                }
+                ByIndex(t) => {
+                    let indexed: Vec<String> = args.split(" ").map(|v| v.to_owned()).collect();
+                    let transformed: Vec<Vec<String>> = t
+                        .iter()
+                        .map(|v| match v {
+                            Index::Single(0) => indexed.clone(),
+                            Index::Single(n) => vec![indexed.get((*n - 1) as usize).unwrap_or(&"".to_string()).clone()],
+                            Index::Multi(n) => indexed.get((-n - 1) as usize..).unwrap_or(&[]).to_vec(),
+                            Index::Literal(s) => vec![s.clone()],
+                        })
+                        .collect();
+                    let new_args: Vec<String> = transformed.iter().flatten().cloned().collect();
+                    args = new_args.join(" ");
+                }
+            }
+        }
+
+        Ok((newcmd, args.to_string()))
+    }
+}
+
+use self::ArgumentTransform::*;
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+enum ArgumentTransform {
+    RegexReplace {
+        find: String,
+        replace: String,
+        #[serde(deserialize_with = "opt_bool_from_int")]
+        global: Option<bool>,
+    },
+    ByIndex(Vec<Index>),
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(untagged)]
+enum Index {
+    Single(u64),
+    Multi(i64),
+    Literal(String),
+}
+
+fn opt_bool_from_int<'de, D>(deserializer: D) -> std::result::Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match u8::deserialize(deserializer)? {
+        0 => Ok(Some(false)),
+        1 => Ok(Some(true)),
+        other => Err(serde::de::Error::invalid_value(
+            serde::de::Unexpected::Unsigned(other as u64),
+            &"zero or one",
+        )),
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct ArgumentTransforms(Vec<ArgumentTransform>);
+
+impl std::ops::Deref for ArgumentTransforms {
+    type Target = Vec<ArgumentTransform>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromSql for ArgumentTransforms {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        value.as_str().and_then(|s| {
+            println!("raw data: {}", s);
+            match serde_json::from_str(s) as std::result::Result<Vec<Option<ArgumentTransform>>, serde_json::Error> {
+                Ok(v) => Ok(Self(v.iter().cloned().filter_map(|v| v).collect())),
+                Err(e) => Err(FromSqlError::Other(Box::new(e))),
+            }
+        })
     }
 }
 

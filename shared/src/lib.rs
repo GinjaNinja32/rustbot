@@ -5,6 +5,7 @@ extern crate serenity;
 #[macro_use]
 extern crate bitflags;
 extern crate parking_lot;
+extern crate regex;
 extern crate serde_json;
 
 pub mod error;

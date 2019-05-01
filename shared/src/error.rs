@@ -76,6 +76,11 @@ impl From<irc::IrcError> for Error {
         Error { msg: format!("{}", s) }
     }
 }
+impl From<regex::Error> for Error {
+    fn from(s: regex::Error) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
 impl From<serde_json::Error> for Error {
     fn from(s: serde_json::Error) -> Self {
         Error { msg: format!("{}", s) }
