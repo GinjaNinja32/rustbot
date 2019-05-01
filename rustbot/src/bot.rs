@@ -308,7 +308,7 @@ pub fn start() -> Result<()> {
             .unwrap()
     };
     run_with_backoff("Discord connection", &|| {
-        let mut dis = dis::Client::new(&token, DiscordBot { bot: b.clone() }).unwrap();
+        let mut dis = dis::Client::new(&token, DiscordBot { bot: b.clone() })?;
         println!("connect: discord");
         dis.start()?;
         Ok(())
