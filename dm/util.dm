@@ -179,3 +179,13 @@
 #define TAG_OUT(A,B) world.log << "[#A]: [B]"
 #define ENC_OUT(A) world.log << "[#A] => [enc(A)]"
 #define VAR_OUT(A) ENC_OUT(A)
+
+#define chars(str) (splittext((str) + " ", regex("")) - "")
+
+#define DIGITS         "0123456789"
+#define ALPHA_LOWER    "abcdefghijklmnopqrstuvwxyz"
+#define ALPHA_UPPER    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+#define ALPHA          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+#define ALPHANUM_LOWER "abcdefghijklmnopqrstuvwxyz0123456789"
+#define ALPHANUM_UPPER "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+#define ALPHANUM       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
