@@ -223,7 +223,6 @@ impl std::ops::Deref for ArgumentTransforms {
 impl FromSql for ArgumentTransforms {
     fn column_result(value: ValueRef) -> FromSqlResult<Self> {
         value.as_str().and_then(|s| {
-            println!("raw data: {}", s);
             match serde_json::from_str(s) as std::result::Result<Vec<Option<ArgumentTransform>>, serde_json::Error> {
                 Ok(v) => Ok(Self(v.iter().cloned().filter_map(|v| v).collect())),
                 Err(e) => Err(FromSqlError::Other(Box::new(e))),
