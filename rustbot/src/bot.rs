@@ -153,18 +153,22 @@ impl Rustbot {
                         .into_owned();
                 }
                 ByIndex(t) => {
-                    let indexed: Vec<String> = args.split(" ").map(|v| v.to_owned()).collect();
-                    let transformed: Vec<Vec<String>> = t
-                        .iter()
-                        .map(|v| match v {
-                            Index::Single(0) => indexed.clone(),
-                            Index::Single(n) => vec![indexed.get((*n - 1) as usize).unwrap_or(&"".to_string()).clone()],
-                            Index::Multi(n) => indexed.get((-n - 1) as usize..).unwrap_or(&[]).to_vec(),
-                            Index::Literal(s) => vec![s.clone()],
-                        })
-                        .collect();
-                    let new_args: Vec<String> = transformed.iter().flatten().cloned().collect();
-                    args = new_args.join(" ");
+                    let new_args = {
+                        let indexed: Vec<_> = args.split(' ').collect();
+                        let mut new_args = Vec::with_capacity(usize::max(5, 2 * indexed.len()));
+                        for item in t.iter() {
+                            match item {
+                                Index::Single(0) => new_args.extend_from_slice(&indexed),
+                                Index::Single(n) => new_args.push(indexed.get((n - 1) as usize).unwrap_or(&"")),
+                                Index::Multi(n) => {
+                                    new_args.extend_from_slice(indexed.get((-n - 1) as usize..).unwrap_or(&[]))
+                                }
+                                Index::Literal(s) => new_args.push(s),
+                            }
+                        }
+                        new_args.join(" ")
+                    };
+                    args = new_args
                 }
             }
         }
