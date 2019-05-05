@@ -80,7 +80,10 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
 
         let mut value = main_lines[main_lines.len() - 1].to_string();
         if value != "" {
-            value = format!(r#"world.log << "[{}]""#, value);
+            value = format!(
+                "var/result = ({})\n    world.log << \"[istype(result, /list) ? json_encode(result) : result]\"",
+                value
+            );
         }
 
         format!(
