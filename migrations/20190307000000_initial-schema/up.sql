@@ -52,7 +52,7 @@ INSERT INTO irc_channels VALUES ('irc', '#bot32-test');
 
 -- CONFIG
 CREATE TABLE dis_config (
-	id INTEGER NOT NULL CHECK (id = 0), -- discord config is a singleton
+	id INTEGER NOT NULL PRIMARY KEY CHECK (id = 0), -- discord config is a singleton
 	cmdchars TEXT NOT NULL,
 	bot_token TEXT NOT NULL
 );
