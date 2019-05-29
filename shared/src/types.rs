@@ -146,10 +146,16 @@ impl Message {
                 (lines, None) => Ok(lines.join("\n")),
                 (lines, Some(extra)) => Ok(format!("{}\n{}", lines.join("\n"), extra)),
             },
-            Code(s) => match paste_max_lines(s, 11)? {
-                (lines, None) => Ok(format!("```\n{}\n```", lines.join("\n"))),
-                (lines, Some(extra)) => Ok(format!("```\n{}\n```{}", lines.join("\n"), extra)),
-            },
+            Code(s) => {
+                if s.contains('\n') {
+                    Ok(format!("`{}`", s))
+                } else {
+                    match paste_max_lines(s, 11)? {
+                        (lines, None) => Ok(format!("```\n{}\n```", lines.join("\n"))),
+                        (lines, Some(extra)) => Ok(format!("```\n{}\n```{}", lines.join("\n"), extra)),
+                    }
+                }
+            }
         }
     }
 }
