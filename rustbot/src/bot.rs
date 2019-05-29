@@ -104,19 +104,18 @@ impl Rustbot {
                     .unwrap(),
             }
         };
-        if let Some(c) = message.get(0..1) {
-            if cmdchars.contains(c) {
-                // it's a command!
-                let parts: Vec<&str> = message[1..].splitn(2, char::is_whitespace).collect();
+        if message.starts_with(|c| cmdchars.contains(c)) {
+            // it's a command!
+            let prefix = message.chars().take(1).next().unwrap();
+            let parts: Vec<&str> = message[prefix.len_utf8()..].splitn(2, char::is_whitespace).collect();
 
-                let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
+            let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
 
-                let res = self.commands.read().get(&cmd).cloned();
-                if let Some(f) = res {
-                    return f.call(ctx, &args);
-                }
-                return Ok(());
+            let res = self.commands.read().get(&cmd).cloned();
+            if let Some(f) = res {
+                return f.call(ctx, &args);
             }
+            return Ok(());
         }
 
         Ok(())
