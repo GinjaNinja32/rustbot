@@ -54,7 +54,14 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         Ok(v) => v,
     };
 
-    let location = format!("{}, {}", data.name, data.sys.country);
+    let location = if let Some(country) = data.sys.country {
+        format!("{}, {}", data.name, country)
+    } else if data.name != "" {
+        data.name
+    } else {
+        "unknown location".to_string()
+    };
+
     let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
     let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
     let temp = format!(
@@ -134,7 +141,7 @@ struct Main {
 
 #[derive(Debug, Deserialize)]
 struct Sys {
-    country: String,
+    country: Option<String>,
     message: f64,
     sunrise: i64,
     sunset: i64,
