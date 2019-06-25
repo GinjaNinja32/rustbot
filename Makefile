@@ -38,11 +38,11 @@ mod_%:
 
 
 mkdir_data:
-	mkdir data/
+	mkdir -p data/
 
+.PHONY: data
 data: mkdir_data data/airports.csv
 
 data/airports.csv:
 	curl -s https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat \
-		| cut -d, -f5-8 \
 		> $@

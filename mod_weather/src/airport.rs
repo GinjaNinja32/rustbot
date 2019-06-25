@@ -11,21 +11,21 @@ fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
     for record in reader.records() {
         let record = record?;
 
-        if record.len() != 4 {
+        if record.len() != 14 {
             return Err(format!(
-                "got a wrong-size csv record? expected len=4, got len={} with {:?}",
+                "got a wrong-size csv record? expected len=14, got len={} with {:?}",
                 record.len(),
                 record,
             )
             .into());
         }
 
-        let iata = &record[0]; // 3 letters
-        let icao = &record[1]; // 4 letters
+        let iata = &record[4]; // 3 letters
+        let icao = &record[5]; // 4 letters
 
         let coords = Coords {
-            lat: record[2].to_string(),
-            lon: record[3].to_string(),
+            lat: record[6].to_string(),
+            lon: record[7].to_string(),
         };
 
         if iata != "\\N" {
@@ -37,7 +37,7 @@ fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
     Ok(result)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Coords {
     pub lat: String,
     pub lon: String,
