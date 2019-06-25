@@ -281,18 +281,13 @@ impl shared::types::Bot for Rustbot {
     fn perms(&self, who: Source) -> Result<Perms> {
         match who {
             IRC {
-                config: c,
-                prefix:
-                    Some(User {
-                        nick: n,
-                        user: u,
-                        host: h,
-                    }),
+                config,
+                prefix: Some(User { nick, user, host }),
                 ..
             } => {
                 let perms: Perms = match self.db.lock().query_row(
                     "SELECT flags FROM irc_permissions WHERE config_id = ? AND nick = ? AND user = ? AND host = ?",
-                    vec![c, n, u, h],
+                    vec![config, nick, user, host],
                     |row| row.get(0),
                 ) {
                     Err(rusqlite::Error::QueryReturnedNoRows) => Perms::None,
