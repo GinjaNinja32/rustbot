@@ -86,3 +86,8 @@ impl From<serde_json::Error> for Error {
         Error { msg: format!("{}", s) }
     }
 }
+impl From<csv::Error> for Error {
+    fn from(s: csv::Error) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}

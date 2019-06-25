@@ -36,3 +36,13 @@ mod_%:
 	echo "$$cargotoml" | sed 's/PACKAGE/$@/g' > $@/Cargo.toml
 	echo "$$librs" > $@/src/lib.rs
 
+
+mkdir_data:
+	mkdir data/
+
+data: mkdir_data data/airports.csv
+
+data/airports.csv:
+	curl -s https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat \
+		| cut -d, -f5-8 \
+		> $@

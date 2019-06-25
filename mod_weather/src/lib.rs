@@ -1,9 +1,14 @@
 extern crate chrono;
+extern crate csv;
+#[macro_use]
+extern crate lazy_static;
 extern crate reqwest;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate shared;
+
+mod airport;
 
 use chrono::NaiveDateTime;
 use rusqlite::NO_PARAMS;
@@ -23,7 +28,11 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         .sql()
         .lock()
         .query_row("SELECT appid FROM mod_weather_config", NO_PARAMS, |row| row.get(0))?;
-    let params = [("q", args), ("APPID", appid.as_str())];
+    let params = if let Some(coords) = airport::locate(args) {
+        vec![("lat", coords.lat), ("lon", coords.lon), ("APPID", appid)]
+    } else {
+        vec![("q", args.to_string()), ("APPID", appid)]
+    };
     let client = reqwest::Client::new();
     let mut result = client
         .get("https://api.openweathermap.org/data/2.5/weather")
