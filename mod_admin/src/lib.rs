@@ -13,7 +13,33 @@ pub fn get_meta() -> Meta {
     meta.cmd("part", Command::new(part).req_perms(Perms::Admin));
     meta.cmd("q", Command::new(query).req_perms(Perms::Admin));
     meta.cmd("whoami", Command::new(whoami));
+
+    meta.cmd("dmsg", Command::new(dmsg).req_perms(Perms::Admin));
+    meta.cmd("imsg", Command::new(imsg).req_perms(Perms::Admin));
+
     meta
+}
+
+fn dmsg(ctx: &Context, args: &str) -> Result<()> {
+    let mut args: Vec<&str> = args.splitn(3, " ").collect();
+    if args.len() != 3 {
+        return Err(Error::new("usage: imsg <config_id> <channel> <message...>"));
+    }
+
+    if args[1].chars().collect::<Vec<char>>()[0] == '#' {
+        args[1] = &args[1][1..];
+    }
+
+    ctx.bot.dis_send_message(args[0], args[1], args[2], true)
+}
+
+fn imsg(ctx: &Context, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.splitn(3, " ").collect();
+    if args.len() != 3 {
+        return Err(Error::new("usage: imsg <config_id> <channel> <message...>"));
+    }
+
+    ctx.bot.irc_send_privmsg(args[0], args[1], args[2])
 }
 
 fn raw(ctx: &Context, args: &str) -> Result<()> {

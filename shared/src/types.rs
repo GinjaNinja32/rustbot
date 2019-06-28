@@ -98,6 +98,8 @@ pub trait Bot {
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;
+
+    fn dis_send_message(&self, &str, &str, &str, bool) -> Result<()>;
 }
 
 pub struct Context<'a> {

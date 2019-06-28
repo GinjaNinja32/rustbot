@@ -10,7 +10,9 @@ use rusqlite::{Connection, NO_PARAMS};
 use serde::Deserialize;
 use serde_json;
 use serenity::model::channel;
+use serenity::model::id::*;
 use serenity::prelude as dis;
+use serenity::CACHE;
 use shared::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -338,6 +340,86 @@ impl shared::types::Bot for Rustbot {
         } else {
             Err(Error::new("invalid configid"))
         }
+    }
+
+    fn dis_send_message(&self, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
+        let cache = CACHE.read();
+
+        let guildobj = {
+            if let Ok(id) = guild.parse() {
+                cache.guilds.get(&GuildId(id))
+            } else {
+                let mut v = None;
+                for (_, g) in &cache.guilds {
+                    if g.read().name == guild {
+                        v = Some(g);
+                        break;
+                    }
+                }
+                v
+            }
+        }
+        .ok_or_else(|| Error::new("guild not found"))?
+        .read();
+
+        let chanid = {
+            if let Ok(id) = channel.parse() {
+                if guildobj.channels.get(&ChannelId(id)).is_some() {
+                    Some(ChannelId(id))
+                } else {
+                    None
+                }
+            } else {
+                let mut v = None;
+                for (id, c) in &guildobj.channels {
+                    if c.read().name == channel {
+                        v = Some(*id);
+                        break;
+                    }
+                }
+                v
+            }
+        }
+        .ok_or_else(|| Error::new("channel not found"))?;
+
+        if process {
+            let mut message = message.to_string();
+
+            let mut replacements = vec![];
+            for (id, m) in &guildobj.members {
+                replacements.push((format!("@{}", m.user.read().name), format!("<@{}>", id)));
+            }
+
+            for (id, r) in &guildobj.roles {
+                replacements.push((format!("@{}", r.name), format!("<@&{}>", id)));
+            }
+
+            for (id, c) in &guildobj.channels {
+                replacements.push((format!("#{}", c.read().name), format!("<#{}>", id)));
+            }
+
+            for (id, e) in &guildobj.emojis {
+                replacements.push((format!(":{}:", e.name), format!("<:{}:{}>", e.name, id)));
+            }
+
+            replacements.sort_by(|l, r| {
+                if l.0.len() != r.0.len() {
+                    return l.0.len().cmp(&r.0.len()).reverse();
+                }
+
+                return l.0.cmp(&r.0);
+            });
+
+            for (find, replace) in replacements {
+                message = message.replace(&find, &replace);
+            }
+
+            chanid.say(message)?;
+        } else {
+            chanid.say(message)?;
+        }
+
+        Ok(())
     }
 }
 

@@ -91,3 +91,8 @@ impl From<csv::Error> for Error {
         Error { msg: format!("{}", s) }
     }
 }
+impl From<std::num::ParseIntError> for Error {
+    fn from(s: std::num::ParseIntError) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
