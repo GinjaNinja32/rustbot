@@ -14,11 +14,11 @@ pub fn get_meta() -> Meta {
     meta.cmd("dml", Command::new(|ctx, args| dm(ctx, args, false, true)));
     meta.cmd(
         "dms",
-        Command::new(|ctx, args| dm(ctx, args, true, false)).req_perms(Perms::Admin),
+        Command::new(|ctx, args| dm(ctx, args, true, false)).req_perms(Perms::Eval),
     );
     meta.cmd(
         "dmsl",
-        Command::new(|ctx, args| dm(ctx, args, true, true)).req_perms(Perms::Admin),
+        Command::new(|ctx, args| dm(ctx, args, true, true)).req_perms(Perms::Eval),
     );
     meta
 }
@@ -28,7 +28,7 @@ fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
     if !secure {
         if args.contains("##") || args.contains("include") {
             ctx.say("You attempted to use either ## or include; both are blocked for security reasons.")?;
-            if ctx.perms()?.contains(Perms::Admin) {
+            if ctx.perms()?.contains(Perms::Eval) {
                 ctx.say("Use !dms or !dmsl to bypass this warning")?;
             }
             return Ok(());

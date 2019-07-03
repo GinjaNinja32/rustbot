@@ -13,8 +13,11 @@ use types::Source::*;
 
 bitflags! {
     pub struct Perms: u64 {
-        const None  = 0x00000000;
-        const Admin = 0x00000001;
+        const None     = 0x00000000;
+        const Admin    = 0x00000001;
+        const Raw      = 0x00000002;
+        const Database = 0x00000004;
+        const Eval     = 0x00000008;
     }
 }
 

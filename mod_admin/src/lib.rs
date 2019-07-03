@@ -8,14 +8,14 @@ use shared::prelude::*;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.cmd("raw", Command::new(raw).req_perms(Perms::Admin));
-    meta.cmd("join", Command::new(join).req_perms(Perms::Admin));
-    meta.cmd("part", Command::new(part).req_perms(Perms::Admin));
-    meta.cmd("q", Command::new(query).req_perms(Perms::Admin));
+    meta.cmd("raw", Command::new(raw).req_perms(Perms::Raw));
+    meta.cmd("join", Command::new(join).req_perms(Perms::Raw));
+    meta.cmd("part", Command::new(part).req_perms(Perms::Raw));
+    meta.cmd("q", Command::new(query).req_perms(Perms::Database));
     meta.cmd("whoami", Command::new(whoami));
 
-    meta.cmd("dmsg", Command::new(dmsg).req_perms(Perms::Admin));
-    meta.cmd("imsg", Command::new(imsg).req_perms(Perms::Admin));
+    meta.cmd("dmsg", Command::new(dmsg).req_perms(Perms::Raw));
+    meta.cmd("imsg", Command::new(imsg).req_perms(Perms::Raw));
 
     meta
 }
