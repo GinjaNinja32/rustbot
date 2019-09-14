@@ -1,4 +1,3 @@
-use db;
 use irc::client::ext::ClientExt;
 use irc::client::prelude as irc;
 use irc::client::prelude::Client;
@@ -13,11 +12,14 @@ use serenity::model::channel;
 use serenity::model::id::*;
 use serenity::prelude as dis;
 use serenity::CACHE;
-use rustbot::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use db;
+use prelude::*;
+use types;
 
 struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
@@ -236,7 +238,7 @@ impl FromSql for ArgumentTransforms {
     }
 }
 
-impl rustbot::types::Bot for Rustbot {
+impl types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
         if let Some(m) = self.modules.write().remove(name) {
             println!("drop module: {}", name);
@@ -246,11 +248,13 @@ impl rustbot::types::Bot for Rustbot {
                     "INSERT INTO modules (name, enabled) VALUES (?, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
                     vec![name],
                 )?;
-            let meta = m.get_meta()?;
-            let mut commands = self.commands.write();
-            for command in meta.commands().iter() {
-                commands.remove(command.0);
-            }
+            m.rent(|meta| {
+                println!("{:?}", meta.commands.keys());
+                let mut commands = self.commands.write();
+                for command in meta.commands.iter() {
+                    commands.remove(command.0);
+                }
+            });
             Ok(())
         } else {
             Ok(())
@@ -270,12 +274,13 @@ impl rustbot::types::Bot for Rustbot {
             "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
             vec![name],
         )?;
-        let m = Module { lib };
-        let meta = m.get_meta()?;
+        let m = load_module(lib)?;
         let mut commands = self.commands.write();
-        for command in meta.commands().iter() {
-            commands.insert(command.0.to_string(), (*command.1).clone());
-        }
+        m.rent(|meta| {
+            for command in meta.commands.iter() {
+                commands.insert(command.0.to_string(), (*command.1).clone());
+            }
+        });
         self.modules.write().insert(name.to_string(), m);
         Ok(())
     }
@@ -565,19 +570,27 @@ impl dis::EventHandler for DiscordBot {
     }
 }
 
-struct Module {
-    //name: String,
-    lib: Library,
-}
+use bot::rent_module::Module;
+rental! {
+    mod rent_module {
+        use types;
 
-impl Module {
-    fn get_meta(&self) -> Result<Meta> {
-        unsafe {
-            let sym: Symbol<Option<unsafe fn() -> Meta>> = self.lib.get(b"get_meta")?;
-            match Symbol::lift_option(sym) {
-                Some(f) => Ok(f()),
-                None => Err(Error::new("symbol not found")),
-            }
+        #[rental]
+        pub struct Module {
+            lib: Box<libloading::Library>,
+            meta: types::Meta,
         }
     }
+}
+
+fn load_module(lib: Library) -> Result<rent_module::Module> {
+    let m = rent_module::Module::try_new_or_drop(Box::new(lib), |lib| unsafe {
+        let sym: Symbol<Option<unsafe fn() -> Meta>> = lib.get(b"get_meta")?;
+        match Symbol::lift_option(sym) {
+            Some(f) => Ok(f()),
+            None => Err(Error::new("symbol not found")),
+        }
+    })?;
+
+    Ok(m)
 }

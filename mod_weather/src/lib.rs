@@ -4,16 +4,16 @@ extern crate csv;
 extern crate lazy_static;
 extern crate reqwest;
 extern crate rusqlite;
+extern crate rustbot;
 extern crate serde;
 extern crate serde_json;
-extern crate rustbot;
 
 mod airport;
 
 use chrono::NaiveDateTime;
 use rusqlite::NO_PARAMS;
-use serde::Deserialize;
 use rustbot::prelude::*;
+use serde::Deserialize;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {

@@ -1,12 +1,13 @@
 #![allow(non_upper_case_globals)]
 
-use error::*;
 use parking_lot::Mutex;
 use rusqlite::types::{FromSqlError, ValueRef};
 use rusqlite::Connection;
 use serenity::model::prelude as serenity;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+
+use error::*;
 use types::Message::*;
 use types::Prefix::*;
 use types::Source::*;
@@ -76,7 +77,7 @@ impl Command {
 }
 
 pub struct Meta {
-    commands: BTreeMap<String, Command>,
+    pub(crate) commands: BTreeMap<String, Command>,
 }
 
 impl Meta {
@@ -87,9 +88,6 @@ impl Meta {
     }
     pub fn cmd(&mut self, name: &str, cmd: Command) {
         self.commands.insert(name.to_string(), cmd);
-    }
-    pub fn commands(&self) -> &BTreeMap<String, Command> {
-        &self.commands
     }
 }
 
