@@ -1,4 +1,4 @@
-use shared::prelude::*;
+use rustbot::prelude::*;
 use std::process::Command;
 
 pub fn bash(ctx: &Context, args: &str) -> Result<()> {

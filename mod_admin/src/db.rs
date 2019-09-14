@@ -1,6 +1,6 @@
 use rusqlite::types::ValueRef::*;
 use rusqlite::NO_PARAMS;
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 pub fn query(ctx: &Context, args: &str) -> Result<()> {
     let result: String = {

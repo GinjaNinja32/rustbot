@@ -6,14 +6,14 @@ extern crate reqwest;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
-extern crate shared;
+extern crate rustbot;
 
 mod airport;
 
 use chrono::NaiveDateTime;
 use rusqlite::NO_PARAMS;
 use serde::Deserialize;
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {

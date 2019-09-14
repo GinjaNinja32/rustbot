@@ -1,6 +1,6 @@
-extern crate shared;
+extern crate rustbot;
 
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {

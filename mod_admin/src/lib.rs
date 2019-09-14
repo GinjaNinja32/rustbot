@@ -1,7 +1,7 @@
 extern crate rusqlite;
-extern crate shared;
+extern crate rustbot;
 
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 mod bash;
 mod db;

@@ -1,6 +1,6 @@
-extern crate shared;
+extern crate rustbot;
 
-use shared::prelude::*;
+use rustbot::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::Hasher;

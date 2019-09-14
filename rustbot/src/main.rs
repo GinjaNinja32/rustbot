@@ -7,7 +7,7 @@ extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate serenity;
-extern crate shared;
+extern crate rustbot;
 
 mod bot;
 mod db;

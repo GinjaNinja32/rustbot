@@ -3,16 +3,27 @@ name = "rustbot"
 version = "0.1.0"
 authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 
+[[bin]]
+name = "rustbot"
+path = "src/main.rs"
+
+[lib]
+name = "rustbot"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
 [dependencies]
 libloading = "0.5.0"
 irc = "0.13.6"
 toml = "0.4.10"
 rusqlite = { version = "0.16.0", features = ["bundled"] }
+reqwest = "0.9.11"
+bitflags = "1.0.4"
 migrant_lib = { version = "0.23.0", features = ["d-sqlite"] }
 rayon = "1.0"
 serenity = "0.5"
-shared = { path = "../shared" }
 parking_lot = { version = "0.7", features = ["deadlock_detection"] }
 serde = { version = "1.0.87", features = ["derive"] }
 serde_json = "1.0.39"
 regex = "1.1.2"
+csv = "1.0.7"

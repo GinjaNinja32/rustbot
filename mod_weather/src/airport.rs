@@ -1,4 +1,4 @@
-use shared::prelude::*;
+use rustbot::prelude::*;
 use std::collections::BTreeMap;
 
 const AIRPORTS_CSV: &'static str = include_str!("../../data/airports.csv");

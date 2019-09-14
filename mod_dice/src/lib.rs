@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate nom;
 extern crate rand;
-extern crate shared;
+extern crate rustbot;
 
 mod dice;
 
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 #[no_mangle]
 pub fn get_meta() -> Meta {

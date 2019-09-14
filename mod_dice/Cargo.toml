@@ -7,6 +7,6 @@ authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 crate_type = ["dylib"]
 
 [dependencies]
-shared = { path = "../shared" }
+rustbot = { path = "../rustbot" }
 nom = "^4.2"
 rand = "0.6.5"

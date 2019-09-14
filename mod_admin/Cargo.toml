@@ -8,4 +8,4 @@ crate_type = ["dylib"]
 
 [dependencies]
 rusqlite = { version = "0.16.0", features = ["bundled"] }
-shared = { path = "../shared" }
+rustbot = { path = "../rustbot" }

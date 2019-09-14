@@ -1,6 +1,6 @@
-extern crate shared;
+extern crate rustbot;
 
-use shared::prelude::*;
+use rustbot::prelude::*;
 use std::process::Command as ProcessCommand;
 use std::str;
 

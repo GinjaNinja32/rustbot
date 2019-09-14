@@ -13,7 +13,7 @@ use serenity::model::channel;
 use serenity::model::id::*;
 use serenity::prelude as dis;
 use serenity::CACHE;
-use shared::prelude::*;
+use rustbot::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
@@ -236,7 +236,7 @@ impl FromSql for ArgumentTransforms {
     }
 }
 
-impl shared::types::Bot for Rustbot {
+impl rustbot::types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
         if let Some(m) = self.modules.write().remove(name) {
             println!("drop module: {}", name);

@@ -1,4 +1,4 @@
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
     let mut args: Vec<&str> = args.splitn(3, " ").collect();

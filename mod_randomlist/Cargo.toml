@@ -7,5 +7,5 @@ authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 crate_type = ["dylib"]
 
 [dependencies]
-shared = { path = "../shared" }
+rustbot = { path = "../rustbot" }
 rusqlite = { version = "0.16.0", features = ["bundled"] }
