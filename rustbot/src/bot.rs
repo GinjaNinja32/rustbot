@@ -240,7 +240,7 @@ impl FromSql for ArgumentTransforms {
 
 impl types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
-        if let Some(m) = self.modules.write().remove(name) {
+        if let Some(mut m) = self.modules.write().remove(name) {
             println!("drop module: {}", name);
             let db = self.db.lock();
             db
@@ -248,13 +248,16 @@ impl types::Bot for Rustbot {
                     "INSERT INTO modules (name, enabled) VALUES (?, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
                     vec![name],
                 )?;
-            m.rent(|meta| {
-                println!("{:?}", meta.commands.keys());
+            m.rent_mut::<_, Result<()>>(|meta| {
                 let mut commands = self.commands.write();
                 for command in meta.commands.iter() {
                     commands.remove(command.0);
                 }
-            });
+                if let Some(f) = &mut meta.deinit {
+                    f(self)?;
+                }
+                Ok(())
+            })?;
             Ok(())
         } else {
             Ok(())
@@ -274,13 +277,14 @@ impl types::Bot for Rustbot {
             "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
             vec![name],
         )?;
-        let m = load_module(lib)?;
+        let mut m = load_module(lib)?;
         let mut commands = self.commands.write();
-        m.rent(|meta| {
+        m.rent_mut::<_, Result<()>>(|meta| {
             for command in meta.commands.iter() {
                 commands.insert(command.0.to_string(), (*command.1).clone());
             }
-        });
+            Ok(())
+        })?;
         self.modules.write().insert(name.to_string(), m);
         Ok(())
     }
