@@ -142,7 +142,6 @@ struct Main {
 #[derive(Debug, Deserialize)]
 struct Sys {
     country: Option<String>,
-    message: f64,
     sunrise: i64,
     sunset: i64,
 }

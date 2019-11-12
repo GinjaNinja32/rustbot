@@ -376,6 +376,13 @@ impl DiceRoll {
                     Some(Explode::Target(t)) => Some(*t),
                 };
 
+                if target.is_some() {
+                    let min_roll = *s.iter().min().unwrap();
+                    if min_roll >= target.unwrap() {
+                        return Err("tried to roll an always-exploding die".to_string());
+                    }
+                }
+
                 let mut rng = thread_rng();
                 let results = iter::repeat_with(|| *s.choose(&mut rng).unwrap())
                     .take_while(|&roll| {
@@ -596,12 +603,12 @@ impl ModOp {
             ModOp::DropLowest => (format_arrays(RED, &l[..r], YELLOW, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
                 let i = l.len() - r;
-                (format_arrays(YELLOW, &l[..i], RED, &l[i..]), &l[..l.len() - r])
+                (format_arrays(YELLOW, &l[..i], RED, &l[i..]), &l[..i])
             }
             ModOp::KeepLowest => (format_arrays(YELLOW, &l[..r], RED, &l[r..]), &l[..r]),
             ModOp::KeepHighest => {
                 let i = l.len() - r;
-                (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[l.len() - r..])
+                (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[i..])
             }
         };
         Ok((s, IntSlice(result.to_vec())))

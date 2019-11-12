@@ -169,7 +169,7 @@
 		L.Swap(i, rand(i,L.len))
 	return L
 
-#define typeid(x) (length("\ref[x]") == 12 ? copytext("\ref[x]", 4, 6) : "0[copytext("\ref[x]", 4, 5)]")
+#define typeid(x) replacetext(copytext("\ref[x]", -9, -7), "x", "0")
 
 #define STDOUT world.log
 #define LOG world.log
