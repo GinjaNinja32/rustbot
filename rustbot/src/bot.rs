@@ -5,7 +5,7 @@ use libloading::{Library, Symbol};
 use parking_lot::{Mutex, RwLock};
 use regex::Regex;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
-use rusqlite::{Connection, NO_PARAMS};
+use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use serde::Deserialize;
 use serde_json;
 use serenity::model::channel;
@@ -25,7 +25,7 @@ struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
     db: Mutex<rusqlite::Connection>,
     modules: RwLock<BTreeMap<String, Module>>,
-    commands: RwLock<BTreeMap<String, Command>>,
+    commands: RwLock<BTreeMap<String, (String, Command)>>,
 }
 
 impl Rustbot {
@@ -116,7 +116,21 @@ impl Rustbot {
             let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
 
             let res = self.commands.read().get(&cmd).cloned();
-            if let Some(f) = res {
+            if let Some((m, f)) = res {
+                {
+                    let db = ctx.bot.sql().lock();
+                    let ok: Option<i8> = match ctx.source {
+                        IRC { ref config, .. } => db.query_row("SELECT 1 FROM modules JOIN irc_modules USING (name) WHERE config_id = ? AND name = ? AND modules.enabled", vec![config, &m], |row| row.get(0)).optional()?,
+                        Discord { .. } => db
+                            .query_row("SELECT 1 FROM modules JOIN dis_modules USING (name) WHERE name = ? AND modules.enabled", vec![m], |row| row.get(0)).optional()?
+                    };
+
+                    match ok {
+                        None => return Ok(()),
+                        _ => {}
+                    }
+                }
+
                 return f.call(ctx, &args);
             }
             return Ok(());
@@ -281,7 +295,7 @@ impl types::Bot for Rustbot {
         let mut commands = self.commands.write();
         m.rent_mut::<_, Result<()>>(|meta| {
             for command in meta.commands.iter() {
-                commands.insert(command.0.to_string(), (*command.1).clone());
+                commands.insert(command.0.to_string(), (name.to_string(), (*command.1).clone()));
             }
             Ok(())
         })?;
@@ -428,6 +442,37 @@ impl types::Bot for Rustbot {
             chanid.say(message)?;
         }
 
+        Ok(())
+    }
+
+    fn dis_set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
+        let db = self.db.lock();
+        if enabled {
+            db.execute(
+                "INSERT INTO dis_modules (config_id, name) VALUES (?, ?)",
+                vec![config_id, name],
+            )?;
+        } else {
+            db.execute(
+                "DELETE FROM dis_modules WHERE config_id = ? AND name = ?",
+                vec![config_id, name],
+            )?;
+        }
+        Ok(())
+    }
+    fn irc_set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
+        let db = self.db.lock();
+        if enabled {
+            db.execute(
+                "INSERT INTO irc_modules (config_id, name) VALUES (?, ?)",
+                vec![config_id, name],
+            )?;
+        } else {
+            db.execute(
+                "DELETE FROM irc_modules WHERE config_id = ? AND name = ?",
+                vec![config_id, name],
+            )?;
+        }
         Ok(())
     }
 }

@@ -1,5 +1,7 @@
 PRAGMA foreign_keys = 1;
 
+-------------------- GLOBAL --------------------
+
 -- MODULES
 CREATE TABLE modules (
 	name TEXT NOT NULL PRIMARY KEY,
@@ -7,7 +9,8 @@ CREATE TABLE modules (
 );
 INSERT INTO modules (name, enabled) VALUES ('core', true);
 
--- BEGIN IRC
+
+-------------------- IRC --------------------
 
 -- CONFIG
 CREATE TABLE irc_config (
@@ -35,7 +38,7 @@ CREATE TABLE irc_permissions (
 	PRIMARY KEY (config_id, nick, user, host),
 	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES irc_config(id)
 );
-INSERT INTO irc_permissions VALUES ('irc', 'GinjaNinja32', 'nyx', 'gn32.uk', 1);
+INSERT INTO irc_permissions VALUES ('irc', 'GinjaNinja32', 'nyx', 'gn32.uk', 15);
 
 -- CHANNELS
 CREATE TABLE irc_channels (
@@ -46,22 +49,43 @@ CREATE TABLE irc_channels (
 );
 INSERT INTO irc_channels VALUES ('irc', '#bot32-test');
 
--- END IRC
+-- MODULES
+CREATE TABLE irc_modules (
+	config_id TEXT NOT NULL,
+	name TEXT NOT NULL,
+	PRIMARY KEY (config_id, name),
+	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES irc_config(id),
+	CONSTRAINT fk_name FOREIGN KEY (name) REFERENCES modules(name)
+);
+INSERT INTO irc_modules VALUES ('irc', 'core');
 
--- BEGIN DISCORD
+
+-------------------- DISCORD --------------------
 
 -- CONFIG
 CREATE TABLE dis_config (
-	id INTEGER NOT NULL PRIMARY KEY CHECK (id = 0), -- discord config is a singleton
+	id TEXT NOT NULL PRIMARY KEY CHECK (id = 'discord'), -- discord config is a singleton
 	cmdchars TEXT NOT NULL,
 	bot_token TEXT NOT NULL
 );
-INSERT INTO dis_config VALUES (0, '.', 'YOUR-BOT-TOKEN-HERE');
+INSERT INTO dis_config VALUES ('discord', '.', 'YOUR-BOT-TOKEN-HERE');
 
 -- PERMISSIONS
 CREATE TABLE dis_permissions (
+	config_id TEXT NOT NULL,
 	user_id INTEGER NOT NULL,
 	flags INTEGER NOT NULL,
-	PRIMARY KEY (user_id)
+	PRIMARY KEY (config_id, user_id),
+	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES dis_config(id)
 );
-INSERT INTO dis_permissions VALUES (169859930382270465, 1);
+INSERT INTO dis_permissions VALUES ('discord', 169859930382270465, 15);
+
+-- MODULES
+CREATE TABLE dis_modules (
+	config_id TEXT NOT NULL,
+	name TEXT NOT NULL,
+	PRIMARY KEY (config_id, name),
+	CONSTRAINT fk_config FOREIGN KEY (config_id) REFERENCES dis_config(id),
+	CONSTRAINT fk_name FOREIGN KEY (name) REFERENCES modules(name)
+);
+INSERT INTO dis_modules VALUES ('discord', 'core');

@@ -11,6 +11,14 @@ pub fn get_meta() -> Meta {
     meta.cmd("load", Command::new(load).req_perms(Perms::Modules));
     meta.cmd("reload", Command::new(reload).req_perms(Perms::Modules));
     meta.cmd("recompile", Command::new(recompile).req_perms(Perms::Modules));
+    meta.cmd(
+        "enable",
+        Command::new(move |ctx, args| set_enabled(ctx, args, true)).req_perms(Perms::Modules),
+    );
+    meta.cmd(
+        "disable",
+        Command::new(move |ctx, args| set_enabled(ctx, args, false)).req_perms(Perms::Modules),
+    );
     meta
 }
 
@@ -71,4 +79,29 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
         }
         Err(e) => ctx.say(&format!("failed to run build: {}", e)),
     }
+}
+
+fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
+    let a = args.split(' ').collect::<Vec<&str>>();
+    if a.len() < 3 {
+        return Err(Error::new(
+            "Usage: (enable/disable) type config_id module [module [...]]",
+        ));
+    }
+
+    let config_id = a[1];
+
+    if a[0] == "irc" {
+        for m in &a[2..] {
+            ctx.bot.irc_set_module_enabled(config_id, m, target)?;
+        }
+    } else if a[0] == "dis" {
+        for m in &a[2..] {
+            ctx.bot.dis_set_module_enabled(config_id, m, target)?;
+        }
+    } else {
+        return Err(Error::new("type must be 'irc' or 'dis'"));
+    }
+
+    ctx.reply(Message::Simple("Done".to_string()))
 }
