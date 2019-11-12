@@ -104,13 +104,12 @@ pub trait Bot {
     fn drop_module(&self, &str) -> Result<()>;
     fn perms(&self, Source) -> Result<Perms>;
     fn sql(&self) -> &Mutex<Connection>;
+    fn set_module_enabled(&self, &str, &str, bool) -> Result<()>;
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;
-    fn irc_set_module_enabled(&self, &str, &str, bool) -> Result<()>;
 
     fn dis_send_message(&self, &str, &str, &str, bool) -> Result<()>;
-    fn dis_set_module_enabled(&self, &str, &str, bool) -> Result<()>;
 }
 
 pub struct Context<'a> {

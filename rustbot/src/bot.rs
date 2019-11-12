@@ -99,12 +99,12 @@ impl Rustbot {
             let db = ctx.bot.sql().lock();
             match ctx.source {
                 IRC { ref config, .. } => db
-                    .query_row("SELECT cmdchars FROM irc_config WHERE id = ?", vec![config], |row| {
+                    .query_row("SELECT cmdchars FROM irc_configs WHERE id = ?", vec![config], |row| {
                         row.get(0)
                     })
                     .unwrap(),
                 Discord { .. } => db
-                    .query_row("SELECT cmdchars FROM dis_config", NO_PARAMS, |row| row.get(0))
+                    .query_row("SELECT cmdchars FROM dis_configs", NO_PARAMS, |row| row.get(0))
                     .unwrap(),
             }
         };
@@ -119,11 +119,11 @@ impl Rustbot {
             if let Some((m, f)) = res {
                 {
                     let db = ctx.bot.sql().lock();
-                    let ok: Option<i8> = match ctx.source {
-                        IRC { ref config, .. } => db.query_row("SELECT 1 FROM modules JOIN irc_modules USING (name) WHERE config_id = ? AND name = ? AND modules.enabled", vec![config, &m], |row| row.get(0)).optional()?,
-                        Discord { .. } => db
-                            .query_row("SELECT 1 FROM modules JOIN dis_modules USING (name) WHERE name = ? AND modules.enabled", vec![m], |row| row.get(0)).optional()?
+                    let config_id = match ctx.source {
+                        IRC { ref config, .. } => config,
+                        Discord { .. } => "discord",
                     };
+                    let ok: Option<i8> = db.query_row("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = ? AND name = ? AND modules.enabled", vec![config_id, &m], |row| row.get(0)).optional()?;
 
                     match ok {
                         None => return Ok(()),
@@ -445,31 +445,16 @@ impl types::Bot for Rustbot {
         Ok(())
     }
 
-    fn dis_set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
+    fn set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
         let db = self.db.lock();
         if enabled {
             db.execute(
-                "INSERT INTO dis_modules (config_id, name) VALUES (?, ?)",
+                "INSERT INTO enabled_modules (config_id, name) VALUES (?, ?)",
                 vec![config_id, name],
             )?;
         } else {
             db.execute(
-                "DELETE FROM dis_modules WHERE config_id = ? AND name = ?",
-                vec![config_id, name],
-            )?;
-        }
-        Ok(())
-    }
-    fn irc_set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
-        let db = self.db.lock();
-        if enabled {
-            db.execute(
-                "INSERT INTO irc_modules (config_id, name) VALUES (?, ?)",
-                vec![config_id, name],
-            )?;
-        } else {
-            db.execute(
-                "DELETE FROM irc_modules WHERE config_id = ? AND name = ?",
+                "DELETE FROM enabled_modules WHERE config_id = ? AND name = ?",
                 vec![config_id, name],
             )?;
         }
@@ -487,7 +472,7 @@ pub fn start() -> Result<()> {
 
     let mut configs: Vec<(String, irc::Config)> = {
         let db = b.db.lock();
-        let mut stmt = db.prepare("SELECT id, nick, user, real, server, port, ssl FROM irc_config")?;
+        let mut stmt = db.prepare("SELECT id, nick, user, real, server, port, ssl FROM irc_configs")?;
         let result: std::result::Result<Vec<(String, irc::Config)>, rusqlite::Error> = stmt
             .query_map(NO_PARAMS, |row| {
                 (
@@ -562,7 +547,7 @@ pub fn start() -> Result<()> {
 
     let token: String = {
         b.db.lock()
-            .query_row("SELECT bot_token FROM dis_config", NO_PARAMS, |row| row.get(0))
+            .query_row("SELECT bot_token FROM dis_configs", NO_PARAMS, |row| row.get(0))
             .unwrap()
     };
     run_with_backoff("Discord connection", &|| {

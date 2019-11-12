@@ -83,24 +83,14 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
 
 fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
     let a = args.split(' ').collect::<Vec<&str>>();
-    if a.len() < 3 {
-        return Err(Error::new(
-            "Usage: (enable/disable) type config_id module [module [...]]",
-        ));
+    if a.len() < 2 {
+        return Err(Error::new("Usage: (enable/disable) config_id module [module [...]]"));
     }
 
-    let config_id = a[1];
+    let config_id = a[0];
 
-    if a[0] == "irc" {
-        for m in &a[2..] {
-            ctx.bot.irc_set_module_enabled(config_id, m, target)?;
-        }
-    } else if a[0] == "dis" {
-        for m in &a[2..] {
-            ctx.bot.dis_set_module_enabled(config_id, m, target)?;
-        }
-    } else {
-        return Err(Error::new("type must be 'irc' or 'dis'"));
+    for m in &a[1..] {
+        ctx.bot.set_module_enabled(config_id, m, target)?;
     }
 
     ctx.reply(Message::Simple("Done".to_string()))
