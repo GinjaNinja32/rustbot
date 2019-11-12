@@ -7,10 +7,10 @@ use std::str;
 #[no_mangle]
 pub fn get_meta() -> Meta {
     let mut meta = Meta::new();
-    meta.cmd("drop", Command::new(drop));
-    meta.cmd("load", Command::new(load));
-    meta.cmd("reload", Command::new(reload));
-    meta.cmd("recompile", Command::new(recompile));
+    meta.cmd("drop", Command::new(drop).req_perms(Perms::Modules));
+    meta.cmd("load", Command::new(load).req_perms(Perms::Modules));
+    meta.cmd("reload", Command::new(reload).req_perms(Perms::Modules));
+    meta.cmd("recompile", Command::new(recompile).req_perms(Perms::Modules));
     meta
 }
 

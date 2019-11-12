@@ -19,6 +19,7 @@ bitflags! {
         const Raw      = 0x00000002;
         const Database = 0x00000004;
         const Eval     = 0x00000008;
+        const Modules  = 0x00000010;
     }
 }
 
