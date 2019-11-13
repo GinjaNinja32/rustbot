@@ -1,20 +1,21 @@
-use migrant_lib::config::SqliteSettingsBuilder;
-use rusqlite::Connection;
+use migrant_lib::config::PostgresSettingsBuilder;
+use postgres::{Connection, TlsMode};
 use std::env;
 use std::error::Error;
 
 pub fn open() -> Result<Connection, String> {
-    migrate().map_err(|e| format!("{}", e))?;
-    Connection::open("bot.db").map_err(|e| format!("{}", e))
+    let conn_str = migrate().map_err(|e| format!("{}", e))?;
+    Connection::connect(conn_str, TlsMode::None).map_err(|e| format!("{}", e))
 }
 
-fn migrate() -> Result<(), Box<Error>> {
+fn migrate() -> Result<String, Box<Error>> {
     let dir = env::current_dir().unwrap();
     if let None = migrant_lib::search_for_settings_file(&dir) {
         migrant_lib::Config::init_in(&dir)
-            .with_sqlite_options(
-                SqliteSettingsBuilder::empty()
-                    .database_path("bot.db")?
+            .with_postgres_options(
+                PostgresSettingsBuilder::empty()
+                    .database_name("rustbot")
+                    .database_user("rustbot")
                     .migration_location("migrations")?,
             )
             .initialize()?;
@@ -35,5 +36,6 @@ fn migrate() -> Result<(), Box<Error>> {
 
     let config = config.reload()?;
     migrant_lib::list(&config)?;
-    Ok(())
+
+    return Ok(config.connect_string()?);
 }

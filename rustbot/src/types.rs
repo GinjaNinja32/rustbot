@@ -1,8 +1,8 @@
 #![allow(non_upper_case_globals)]
 
 use parking_lot::Mutex;
-use rusqlite::types::{FromSqlError, ValueRef};
-use rusqlite::Connection;
+use postgres::types::FromSql;
+use postgres::Connection;
 use serenity::model::prelude as serenity;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -36,13 +36,15 @@ impl std::fmt::Display for Perms {
     }
 }
 
-impl rusqlite::types::FromSql for Perms {
-    fn column_result(v: ValueRef) -> std::result::Result<Perms, FromSqlError> {
-        match v {
-            ValueRef::Null => Ok(Perms::None),
-            ValueRef::Integer(v) => Ok(Perms { bits: v as u64 }),
-            _ => Err(FromSqlError::InvalidType),
-        }
+impl FromSql for Perms {
+    fn from_sql(
+        ty: &postgres::types::Type,
+        raw: &[u8],
+    ) -> std::result::Result<Self, Box<std::error::Error + 'static + Send + Sync>> {
+        i64::from_sql(ty, raw).map(|i| Perms { bits: i as u64 })
+    }
+    fn accepts(ty: &postgres::types::Type) -> bool {
+        i64::accepts(ty)
     }
 }
 
@@ -104,7 +106,6 @@ pub trait Bot {
     fn drop_module(&self, &str) -> Result<()>;
     fn perms(&self, Source) -> Result<Perms>;
     fn sql(&self) -> &Mutex<Connection>;
-    fn set_module_enabled(&self, &str, &str, bool) -> Result<()>;
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;

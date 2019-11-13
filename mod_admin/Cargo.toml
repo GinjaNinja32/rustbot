@@ -7,5 +7,6 @@ authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
 crate_type = ["dylib"]
 
 [dependencies]
-rusqlite = { version = "0.16.0", features = ["bundled"] }
+postgres = { version = "0.15.2", features = ["with-serde_json"] }
 rustbot = { path = "../rustbot" }
+serde_json = "1.0.39"

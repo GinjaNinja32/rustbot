@@ -2,3 +2,4 @@ Cargo.lock
 target
 bot.db
 data
+Migrant.toml

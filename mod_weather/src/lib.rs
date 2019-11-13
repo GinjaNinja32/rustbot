@@ -11,7 +11,6 @@ extern crate serde_json;
 mod airport;
 
 use chrono::NaiveDateTime;
-use rusqlite::NO_PARAMS;
 use rustbot::prelude::*;
 use serde::Deserialize;
 
@@ -27,7 +26,9 @@ fn weather(ctx: &Context, args: &str) -> Result<()> {
         .bot
         .sql()
         .lock()
-        .query_row("SELECT appid FROM mod_weather_config", NO_PARAMS, |row| row.get(0))?;
+        .query("SELECT appid FROM mod_weather_config", &[])?
+        .get(0)
+        .get(0);
     let params = if let Some(coords) = airport::locate(args) {
         vec![("lat", coords.lat), ("lon", coords.lon), ("APPID", appid)]
     } else {

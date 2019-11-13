@@ -90,7 +90,18 @@ fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
     let config_id = a[0];
 
     for m in &a[1..] {
-        ctx.bot.set_module_enabled(config_id, m, target)?;
+        let db = ctx.bot.sql().lock();
+        if target {
+            db.execute(
+                "INSERT INTO enabled_modules (config_id, name) VALUES ($1, $2)",
+                &[&config_id, &m],
+            )?;
+        } else {
+            db.execute(
+                "DELETE FROM enabled_modules WHERE config_id = $1 AND name = $2",
+                &[&config_id, &m],
+            )?;
+        }
     }
 
     ctx.reply(Message::Simple("Done".to_string()))

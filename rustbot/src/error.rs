@@ -56,11 +56,6 @@ impl From<std::io::Error> for Error {
         Error { msg: format!("{}", s) }
     }
 }
-impl From<rusqlite::Error> for Error {
-    fn from(s: rusqlite::Error) -> Self {
-        Error { msg: format!("{}", s) }
-    }
-}
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(s: std::sync::PoisonError<T>) -> Self {
         Error { msg: format!("{}", s) }
@@ -93,6 +88,11 @@ impl From<csv::Error> for Error {
 }
 impl From<std::num::ParseIntError> for Error {
     fn from(s: std::num::ParseIntError) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
+impl From<postgres::Error> for Error {
+    fn from(s: postgres::Error) -> Self {
         Error { msg: format!("{}", s) }
     }
 }

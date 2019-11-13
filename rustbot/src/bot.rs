@@ -3,9 +3,9 @@ use irc::client::prelude as irc;
 use irc::client::prelude::Client;
 use libloading::{Library, Symbol};
 use parking_lot::{Mutex, RwLock};
+use postgres::types::FromSql;
+use postgres::Connection;
 use regex::Regex;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
-use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use serde::Deserialize;
 use serde_json;
 use serenity::model::channel;
@@ -13,6 +13,7 @@ use serenity::model::id::*;
 use serenity::prelude as dis;
 use serenity::CACHE;
 use std::collections::BTreeMap;
+use std::str;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -23,7 +24,7 @@ use types;
 
 struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
-    db: Mutex<rusqlite::Connection>,
+    db: Mutex<postgres::Connection>,
     modules: RwLock<BTreeMap<String, Module>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
 }
@@ -99,13 +100,10 @@ impl Rustbot {
             let db = ctx.bot.sql().lock();
             match ctx.source {
                 IRC { ref config, .. } => db
-                    .query_row("SELECT cmdchars FROM irc_configs WHERE id = ?", vec![config], |row| {
-                        row.get(0)
-                    })
-                    .unwrap(),
-                Discord { .. } => db
-                    .query_row("SELECT cmdchars FROM dis_configs", NO_PARAMS, |row| row.get(0))
-                    .unwrap(),
+                    .query("SELECT cmdchars FROM irc_configs WHERE id = $1", &[config])?
+                    .get(0)
+                    .get(0),
+                Discord { .. } => db.query("SELECT cmdchars FROM dis_configs", &[])?.get(0).get(0),
             }
         };
         if message.starts_with(|c| cmdchars.contains(c)) {
@@ -123,11 +121,8 @@ impl Rustbot {
                         IRC { ref config, .. } => config,
                         Discord { .. } => "discord",
                     };
-                    let ok: Option<i8> = db.query_row("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = ? AND name = ? AND modules.enabled", vec![config_id, &m], |row| row.get(0)).optional()?;
-
-                    match ok {
-                        None => return Ok(()),
-                        _ => {}
+                    if db.query("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND name = $2 AND modules.enabled", &[&config_id, &m])?.is_empty() {
+                        return Ok(());
                     }
                 }
 
@@ -142,18 +137,25 @@ impl Rustbot {
     fn resolve_alias(&self, cmd: &str, args: &str) -> Result<(String, String)> {
         let (newcmd, transforms): (String, ArgumentTransforms) = {
             let db = self.sql().lock();
-            db.query_row(
-                "WITH resolve(depth, name, transform) AS (
-                    SELECT 0, ?, null
+            let rows = db.query(
+                "WITH RECURSIVE resolve(depth, name, transform) AS (
+                    VALUES (0, $1, null)
                     UNION ALL SELECT resolve.depth + 1, aliases.target, aliases.transform
                               FROM aliases, resolve
                               WHERE aliases.name = resolve.name
                 )
-                SELECT max(depth), name, json_remove(json_group_array(json(transform)), '$[0]')
-                FROM resolve",
-                vec![cmd],
-                |row| (row.get(1), row.get(2)),
-            )?
+                VALUES (
+                    (SELECT name FROM resolve ORDER BY depth DESC LIMIT 1),
+                    (to_jsonb(array(SELECT transform FROM resolve WHERE transform IS NOT NULL ORDER BY depth ASC)))
+                )",
+                &[&cmd],
+            )?;
+            if rows.is_empty() {
+                return Err(Error::new("failed to resolve alias: no result rows?"));
+            }
+            let row = rows.get(0);
+
+            (row.get(0), row.get(1))
         };
 
         let mut args = args.to_string();
@@ -242,13 +244,16 @@ impl std::ops::Deref for ArgumentTransforms {
 }
 
 impl FromSql for ArgumentTransforms {
-    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
-        value.as_str().and_then(|s| {
-            match serde_json::from_str(s) as std::result::Result<Vec<Option<ArgumentTransform>>, serde_json::Error> {
-                Ok(v) => Ok(Self(v.iter().cloned().filter_map(|v| v).collect())),
-                Err(e) => Err(FromSqlError::Other(Box::new(e))),
-            }
-        })
+    fn from_sql(
+        ty: &postgres::types::Type,
+        raw: &[u8],
+    ) -> std::result::Result<Self, Box<std::error::Error + 'static + Send + Sync>> {
+        let v = serde_json::Value::from_sql(ty, raw)?;
+        return Ok(serde_json::from_value(v)?);
+    }
+
+    fn accepts(ty: &postgres::types::Type) -> bool {
+        serde_json::Value::accepts(ty)
     }
 }
 
@@ -259,8 +264,8 @@ impl types::Bot for Rustbot {
             let db = self.db.lock();
             db
                 .execute(
-                    "INSERT INTO modules (name, enabled) VALUES (?, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
-                    vec![name],
+                    "INSERT INTO modules (name, enabled) VALUES ($1, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
+                    &[&name],
                 )?;
             m.rent_mut::<_, Result<()>>(|meta| {
                 let mut commands = self.commands.write();
@@ -288,8 +293,8 @@ impl types::Bot for Rustbot {
         let lib = Library::new(libpath)?;
 
         self.db.lock().execute(
-            "INSERT INTO modules (name, enabled) VALUES (?, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
-            vec![name],
+            "INSERT INTO modules (name, enabled) VALUES ($1, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
+            &[&name],
         )?;
         let mut m = load_module(lib)?;
         let mut commands = self.commands.write();
@@ -310,32 +315,40 @@ impl types::Bot for Rustbot {
                 prefix: Some(User { nick, user, host }),
                 ..
             } => {
-                let perms: Perms = match self.db.lock().query_row(
-                    "SELECT flags FROM irc_permissions WHERE config_id = ? AND nick = ? AND user = ? AND host = ?",
-                    vec![config, nick, user, host],
-                    |row| row.get(0),
+                let perms: Perms = match self.db.lock().query(
+                    "SELECT flags FROM irc_permissions WHERE config_id = $1 AND nick = $2 AND username = $3 AND host = $4",
+                    &[&config, &nick, &user, &host],
                 ) {
-                    Err(rusqlite::Error::QueryReturnedNoRows) => Perms::None,
                     Err(e) => {
                         println!("error: {}", e);
                         Perms::None
                     }
-                    Ok(v) => v,
+                    Ok(v) => {
+                        if v.is_empty() {
+                            Perms::None
+                        } else {
+                            v.get(0).get(0)
+                        }
+                    }
                 };
                 Ok(perms)
             }
             Discord { user, .. } => {
-                let perms: Perms = match self.db.lock().query_row(
-                    "SELECT flags FROM dis_permissions WHERE user_id = ?",
-                    vec![*user.id.as_u64() as i64],
-                    |row| row.get(0),
+                let perms: Perms = match self.db.lock().query(
+                    "SELECT flags FROM dis_permissions WHERE user_id = $1",
+                    &[&(*user.id.as_u64() as i64)],
                 ) {
-                    Err(rusqlite::Error::QueryReturnedNoRows) => Perms::None,
                     Err(e) => {
                         println!("error: {}", e);
                         Perms::None
                     }
-                    Ok(v) => v,
+                    Ok(v) => {
+                        if v.is_empty() {
+                            Perms::None
+                        } else {
+                            v.get(0).get(0)
+                        }
+                    }
                 };
                 Ok(perms)
             }
@@ -444,22 +457,6 @@ impl types::Bot for Rustbot {
 
         Ok(())
     }
-
-    fn set_module_enabled(&self, config_id: &str, name: &str, enabled: bool) -> Result<()> {
-        let db = self.db.lock();
-        if enabled {
-            db.execute(
-                "INSERT INTO enabled_modules (config_id, name) VALUES (?, ?)",
-                vec![config_id, name],
-            )?;
-        } else {
-            db.execute(
-                "DELETE FROM enabled_modules WHERE config_id = ? AND name = ?",
-                vec![config_id, name],
-            )?;
-        }
-        Ok(())
-    }
 }
 
 pub fn start() -> Result<()> {
@@ -472,9 +469,12 @@ pub fn start() -> Result<()> {
 
     let mut configs: Vec<(String, irc::Config)> = {
         let db = b.db.lock();
-        let mut stmt = db.prepare("SELECT id, nick, user, real, server, port, ssl FROM irc_configs")?;
-        let result: std::result::Result<Vec<(String, irc::Config)>, rusqlite::Error> = stmt
-            .query_map(NO_PARAMS, |row| {
+        let rows = db.query(
+            "SELECT id, nick, username, real, server, port, ssl FROM irc_configs",
+            &[],
+        )?;
+        rows.iter()
+            .map(|row| {
                 (
                     row.get(0),
                     irc::Config {
@@ -482,38 +482,33 @@ pub fn start() -> Result<()> {
                         username: row.get(2),
                         realname: row.get(3),
                         server: row.get(4),
-                        port: row.get(5),
+                        port: row.get::<_, Option<i32>>(5).map(|v| v as u16),
                         use_ssl: row.get(6),
                         ..irc::Config::default()
                     },
                 )
-            })?
-            .collect();
-
-        result?
+            })
+            .collect()
     };
 
     for (id, conf) in configs.iter_mut() {
         let db = b.db.lock();
         let cid = id.clone();
         conf.channels = db
-            .prepare("SELECT channel FROM irc_channels WHERE config_id = ?")
-            .and_then(|mut stmt| stmt.query_map(vec![cid], |row| row.get(0)).and_then(|c| c.collect()))?;
+            .query("SELECT channel FROM irc_channels WHERE config_id = $1", &[&cid])?
+            .iter()
+            .map(|row| row.get(0))
+            .collect();
     }
 
     {
         let modules: Vec<String> = {
             let db = b.db.lock();
             let m = db
-                .prepare("SELECT name FROM modules WHERE enabled = true")
-                .and_then(|mut stmt| {
-                    stmt.query_map(NO_PARAMS, |row| {
-                        let s: String = row.get(0);
-                        s.clone()
-                    })
-                    .and_then(|v| v.collect())
-                })
-                .unwrap();
+                .query("SELECT name FROM modules WHERE enabled = true", &[])?
+                .iter()
+                .map(|row| row.get(0))
+                .collect();
             m
         };
         for m in modules {
@@ -547,8 +542,9 @@ pub fn start() -> Result<()> {
 
     let token: String = {
         b.db.lock()
-            .query_row("SELECT bot_token FROM dis_configs", NO_PARAMS, |row| row.get(0))
-            .unwrap()
+            .query("SELECT bot_token FROM dis_configs", &[])?
+            .get(0)
+            .get(0)
     };
     run_with_backoff("Discord connection", &|| {
         let mut dis = dis::Client::new(&token, DiscordBot { bot: b.clone() })?;

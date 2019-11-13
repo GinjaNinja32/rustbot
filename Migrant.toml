@@ -1,3 +1,0 @@
-database_type = "sqlite"
-database_path = "bot.db"
-migration_location = "migrations"

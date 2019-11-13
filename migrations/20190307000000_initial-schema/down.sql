@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = 0;
-
 DROP TABLE configs;
 DROP TABLE modules;
 DROP TABLE enabled_modules;
