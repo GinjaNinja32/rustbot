@@ -11,19 +11,20 @@ use serde_json;
 use serenity::model::channel;
 use serenity::model::id::*;
 use serenity::prelude as dis;
-use serenity::CACHE;
 use std::collections::BTreeMap;
 use std::str;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use config;
 use db;
 use prelude::*;
 use types;
 
 struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
+    caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
     db: Mutex<postgres::Connection>,
     modules: RwLock<BTreeMap<String, Module>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
@@ -57,12 +58,12 @@ impl Rustbot {
     fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
         if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
             let source = IRC {
-                config: cfg.clone(),
                 prefix: self.irc_parse_prefix(irc_msg.prefix),
                 channel: Some(channel),
             };
             let ctx = &Context {
                 bot: self,
+                config: cfg,
                 source: source,
                 bot_name: bot_name.to_string(),
             };
@@ -70,13 +71,17 @@ impl Rustbot {
         }
     }
 
-    fn dis_incoming(&self, msg: channel::Message) {
+    fn dis_incoming(&self, cfg: String, disctx: dis::Context, msg: channel::Message) {
         let ctx = &Context {
             bot: self,
+            config: cfg,
             source: Discord {
                 user: msg.author,
                 channel: msg.channel_id,
                 guild: msg.guild_id,
+
+                cache: disctx.cache,
+                http: disctx.http,
             },
             bot_name: "".to_string(),
         };
@@ -98,13 +103,9 @@ impl Rustbot {
     fn handle_inner(&self, ctx: &Context, message: &str) -> Result<()> {
         let cmdchars: String = {
             let db = ctx.bot.sql().lock();
-            match ctx.source {
-                IRC { ref config, .. } => db
-                    .query("SELECT cmdchars FROM irc_configs WHERE id = $1", &[config])?
-                    .get(0)
-                    .get(0),
-                Discord { .. } => db.query("SELECT cmdchars FROM dis_configs", &[])?.get(0).get(0),
-            }
+            db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?
+                .get(0)
+                .get(0)
         };
         if message.starts_with(|c| cmdchars.contains(c)) {
             // it's a command!
@@ -117,11 +118,7 @@ impl Rustbot {
             if let Some((m, f)) = res {
                 {
                     let db = ctx.bot.sql().lock();
-                    let config_id = match ctx.source {
-                        IRC { ref config, .. } => config,
-                        Discord { .. } => "discord",
-                    };
-                    if db.query("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND name = $2 AND modules.enabled", &[&config_id, &m])?.is_empty() {
+                    if db.query("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND name = $2 AND modules.enabled", &[&ctx.config, &m])?.is_empty() {
                         return Ok(());
                     }
                 }
@@ -247,7 +244,7 @@ impl FromSql for ArgumentTransforms {
     fn from_sql(
         ty: &postgres::types::Type,
         raw: &[u8],
-    ) -> std::result::Result<Self, Box<std::error::Error + 'static + Send + Sync>> {
+    ) -> std::result::Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
         let v = serde_json::Value::from_sql(ty, raw)?;
         return Ok(serde_json::from_value(v)?);
     }
@@ -308,10 +305,9 @@ impl types::Bot for Rustbot {
         Ok(())
     }
 
-    fn perms(&self, who: Source) -> Result<Perms> {
+    fn perms(&self, config: &str, who: &Source) -> Result<Perms> {
         match who {
             IRC {
-                config,
                 prefix: Some(User { nick, user, host }),
                 ..
             } => {
@@ -335,8 +331,8 @@ impl types::Bot for Rustbot {
             }
             Discord { user, .. } => {
                 let perms: Perms = match self.db.lock().query(
-                    "SELECT flags FROM dis_permissions WHERE user_id = $1",
-                    &[&(*user.id.as_u64() as i64)],
+                    "SELECT flags FROM dis_permissions WHERE config_id = $1 AND user_id = $2",
+                    &[&config, &(*user.id.as_u64() as i64)],
                 ) {
                     Err(e) => {
                         println!("error: {}", e);
@@ -378,8 +374,13 @@ impl types::Bot for Rustbot {
         }
     }
 
-    fn dis_send_message(&self, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
-        let cache = CACHE.read();
+    fn dis_send_message(&self, config: &str, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
+        let cache_and_http = match self.caches.read().get(config) {
+            None => return Err(Error::new(&format!("no cache found for config {:?}", config))),
+            Some(c) => Arc::clone(&c),
+        };
+
+        let cache = cache_and_http.cache.read();
 
         let guildobj = {
             if let Ok(id) = guild.parse() {
@@ -450,9 +451,9 @@ impl types::Bot for Rustbot {
                 message = message.replace(&find, &replace);
             }
 
-            chanid.say(message)?;
+            chanid.say(Arc::clone(&cache_and_http.http), message)?;
         } else {
-            chanid.say(message)?;
+            chanid.say(Arc::clone(&cache_and_http.http), message)?;
         }
 
         Ok(())
@@ -462,44 +463,13 @@ impl types::Bot for Rustbot {
 pub fn start() -> Result<()> {
     let b = Arc::new(Rustbot {
         clients: RwLock::new(BTreeMap::new()),
+        caches: RwLock::new(BTreeMap::new()),
         db: Mutex::new(db::open().unwrap()),
         modules: RwLock::new(BTreeMap::new()),
         commands: RwLock::new(BTreeMap::new()),
     });
 
-    let mut configs: Vec<(String, irc::Config)> = {
-        let db = b.db.lock();
-        let rows = db.query(
-            "SELECT id, nick, username, real, server, port, ssl FROM irc_configs",
-            &[],
-        )?;
-        rows.iter()
-            .map(|row| {
-                (
-                    row.get(0),
-                    irc::Config {
-                        nickname: row.get(1),
-                        username: row.get(2),
-                        realname: row.get(3),
-                        server: row.get(4),
-                        port: row.get::<_, Option<i32>>(5).map(|v| v as u16),
-                        use_ssl: row.get(6),
-                        ..irc::Config::default()
-                    },
-                )
-            })
-            .collect()
-    };
-
-    for (id, conf) in configs.iter_mut() {
-        let db = b.db.lock();
-        let cid = id.clone();
-        conf.channels = db
-            .query("SELECT channel FROM irc_channels WHERE config_id = $1", &[&cid])?
-            .iter()
-            .map(|row| row.get(0))
-            .collect();
-    }
+    let config = config::load()?;
 
     {
         let modules: Vec<String> = {
@@ -516,20 +486,38 @@ pub fn start() -> Result<()> {
         }
     }
 
-    for (id, conf) in configs {
+    for c in config.irc {
+        let channels: Vec<String> = {
+            let db = b.db.lock();
+            let cid = c.id.clone();
+            db.query("SELECT channel FROM irc_channels WHERE config_id = $1", &[&cid])?
+                .iter()
+                .map(|row| row.get(0))
+                .collect()
+        };
+
         let b = b.clone();
         thread::Builder::new()
-            .name(format!("IRC: {}", irc_descriptor(id.as_str(), &conf)))
+            .name(format!("IRC: {}", irc_descriptor(&c)))
             .spawn(move || {
-                run_with_backoff(&format!("IRC connection for {}", id), &|| {
-                    let client = Arc::new(irc::IrcClient::from_config(conf.clone())?);
+                run_with_backoff(&format!("IRC connection for {}", c.id), &|| {
+                    let client = Arc::new(irc::IrcClient::from_config(irc::Config {
+                        nickname: Some(c.nick.clone()),
+                        username: Some(c.user.clone()),
+                        realname: Some(c.real.clone()),
+                        server: Some(c.server.clone()),
+                        port: Some(c.port),
+                        use_ssl: Some(c.ssl),
+                        channels: Some(channels.clone()),
+                        ..Default::default()
+                    })?);
                     client.send_cap_req(&[irc::Capability::MultiPrefix])?;
                     client.identify()?;
-                    b.clients.write().insert(id.clone(), client.clone());
-                    println!("connect: {}", irc_descriptor(id.as_str(), &conf));
+                    b.clients.write().insert(c.id.clone(), client.clone());
+                    println!("connect: {}", irc_descriptor(&c));
                     client.for_each_incoming(|irc_msg| {
                         let b = b.clone();
-                        let id = id.clone();
+                        let id = c.id.clone();
                         rayon::spawn(move || {
                             let client = { b.clients.read().get(&id).unwrap().clone() };
                             b.irc_incoming(id.clone(), client.current_nickname(), irc_msg);
@@ -540,22 +528,31 @@ pub fn start() -> Result<()> {
             })?;
     }
 
-    let token: String = {
-        b.db.lock()
-            .query("SELECT bot_token FROM dis_configs", &[])?
-            .get(0)
-            .get(0)
-    };
-    run_with_backoff("Discord connection", &|| {
-        let mut dis = dis::Client::new(&token, DiscordBot { bot: b.clone() })?;
-        println!("connect: discord");
-        dis.start()?;
-        Ok(())
-    });
+    for c in config.discord {
+        let b = b.clone();
+        thread::Builder::new()
+            .name(format!("Discord: {}", c.id.clone()))
+            .spawn(move || {
+                run_with_backoff("Discord connection", &|| {
+                    let mut dis = dis::Client::new(
+                        &c.token,
+                        DiscordBot {
+                            id: c.id.clone(),
+                            bot: b.clone(),
+                        },
+                    )?;
+
+                    b.caches.write().insert(c.id.clone(), dis.cache_and_http.clone());
+                    println!("connect: discord");
+                    dis.start()?;
+                    Ok(())
+                });
+            })?;
+    }
     Ok(())
 }
 
-fn run_with_backoff(desc: &str, f: &Fn() -> Result<()>) {
+fn run_with_backoff(desc: &str, f: &dyn Fn() -> Result<()>) {
     let backoff_durations: &[u64] = &[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
     let mut b = 0; // current backoff level
     loop {
@@ -578,24 +575,21 @@ fn run_with_backoff(desc: &str, f: &Fn() -> Result<()>) {
     }
 }
 
-fn irc_descriptor(id: &str, conf: &irc::Config) -> String {
-    format!(
-        "{} ({}:{})",
-        id,
-        conf.server.clone().expect("a non-None server address"),
-        conf.port.expect("a non-None server port")
-    )
+fn irc_descriptor(c: &config::IRCConfig) -> String {
+    format!("{} ({}:{})", c.id, c.server, c.port,)
 }
 
 struct DiscordBot {
+    id: String,
     bot: Arc<Rustbot>,
 }
 
 impl dis::EventHandler for DiscordBot {
-    fn message(&self, _disctx: dis::Context, msg: channel::Message) {
+    fn message(&self, disctx: dis::Context, msg: channel::Message) {
+        let id = self.id.clone();
         let bot = self.bot.clone();
         rayon::spawn(move || {
-            bot.dis_incoming(msg);
+            bot.dis_incoming(id, disctx, msg);
         });
     }
 }

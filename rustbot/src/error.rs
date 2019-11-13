@@ -46,8 +46,8 @@ impl From<std::str::Utf8Error> for Error {
         Error { msg: format!("{}", s) }
     }
 }
-impl From<Box<std::error::Error>> for Error {
-    fn from(s: Box<std::error::Error>) -> Self {
+impl From<Box<dyn std::error::Error>> for Error {
+    fn from(s: Box<dyn std::error::Error>) -> Self {
         Error { msg: format!("{}", s) }
     }
 }
@@ -93,6 +93,11 @@ impl From<std::num::ParseIntError> for Error {
 }
 impl From<postgres::Error> for Error {
     fn from(s: postgres::Error) -> Self {
+        Error { msg: format!("{}", s) }
+    }
+}
+impl From<toml::de::Error> for Error {
+    fn from(s: toml::de::Error) -> Self {
         Error { msg: format!("{}", s) }
     }
 }

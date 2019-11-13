@@ -1,14 +1,13 @@
 use migrant_lib::config::PostgresSettingsBuilder;
 use postgres::{Connection, TlsMode};
 use std::env;
-use std::error::Error;
 
 pub fn open() -> Result<Connection, String> {
     let conn_str = migrate().map_err(|e| format!("{}", e))?;
     Connection::connect(conn_str, TlsMode::None).map_err(|e| format!("{}", e))
 }
 
-fn migrate() -> Result<String, Box<Error>> {
+fn migrate() -> Result<String, Box<dyn std::error::Error>> {
     let dir = env::current_dir().unwrap();
     if let None = migrant_lib::search_for_settings_file(&dir) {
         migrant_lib::Config::init_in(&dir)

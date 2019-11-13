@@ -18,6 +18,7 @@ pub mod error;
 pub mod types;
 
 pub mod bot;
+mod config;
 mod db;
 
 pub mod prelude {

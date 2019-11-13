@@ -3,7 +3,7 @@
 use parking_lot::Mutex;
 use postgres::types::FromSql;
 use postgres::Connection;
-use serenity::model::prelude as serenity;
+use serenity::model::prelude as serenitym;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -40,7 +40,7 @@ impl FromSql for Perms {
     fn from_sql(
         ty: &postgres::types::Type,
         raw: &[u8],
-    ) -> std::result::Result<Self, Box<std::error::Error + 'static + Send + Sync>> {
+    ) -> std::result::Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
         i64::from_sql(ty, raw).map(|i| Perms { bits: i as u64 })
     }
     fn accepts(ty: &postgres::types::Type) -> bool {
@@ -48,7 +48,7 @@ impl FromSql for Perms {
     }
 }
 
-pub type CommandFn = Fn(&Context, &str) -> Result<()> + Send + Sync;
+pub type CommandFn = dyn Fn(&Context, &str) -> Result<()> + Send + Sync;
 #[derive(Clone)]
 pub struct Command {
     pub function: Arc<CommandFn>,
@@ -79,7 +79,7 @@ impl Command {
     }
 }
 
-pub type DeinitFn = FnMut(&Bot) -> Result<()> + Send + Sync;
+pub type DeinitFn = dyn FnMut(&dyn Bot) -> Result<()> + Send + Sync;
 
 pub struct Meta {
     pub(crate) commands: BTreeMap<String, Command>,
@@ -104,17 +104,18 @@ impl Meta {
 pub trait Bot {
     fn load_module(&self, &str) -> Result<()>;
     fn drop_module(&self, &str) -> Result<()>;
-    fn perms(&self, Source) -> Result<Perms>;
+    fn perms(&self, &str, &Source) -> Result<Perms>;
     fn sql(&self) -> &Mutex<Connection>;
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;
 
-    fn dis_send_message(&self, &str, &str, &str, bool) -> Result<()>;
+    fn dis_send_message(&self, &str, &str, &str, &str, bool) -> Result<()>;
 }
 
 pub struct Context<'a> {
-    pub bot: &'a (Bot + Sync),
+    pub bot: &'a (dyn Bot + Sync),
+    pub config: String,
     pub source: Source,
     pub bot_name: String,
 }
@@ -179,22 +180,17 @@ impl<'a> Context<'a> {
     }
     pub fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
-            IRC {
-                config,
-                prefix,
-                channel,
-            } => {
+            IRC { prefix, channel } => {
                 if let Some(ch) = channel {
                     if let Some(User { nick, .. }) = prefix {
                         if *ch == self.bot_name {
                             for msg in message.format_irc()? {
-                                self.bot
-                                    .irc_send_privmsg(config.as_str(), nick.as_str(), msg.as_str())?;
+                                self.bot.irc_send_privmsg(&self.config, nick.as_str(), msg.as_str())?;
                             }
                         } else {
                             for msg in message.format_irc()? {
                                 self.bot.irc_send_privmsg(
-                                    config.as_str(),
+                                    &self.config,
                                     ch.as_str(),
                                     &format!("{}: {}", nick.as_str(), msg.as_str()),
                                 )?;
@@ -203,45 +199,47 @@ impl<'a> Context<'a> {
                     }
                 }
             }
-            Discord { channel, .. } => {
-                channel.say(message.format_discord()?).map(|_| ())?;
+            Discord { channel, http, .. } => {
+                channel.say(http, message.format_discord()?).map(|_| ())?;
             }
         }
 
         Ok(())
     }
     pub fn perms(&self) -> Result<Perms> {
-        self.bot.perms(self.source.clone())
+        self.bot.perms(&self.config, &self.source)
     }
 
     pub fn irc_send_privmsg(&self, chan: &str, msg: &str) -> Result<()> {
-        if let IRC { ref config, .. } = self.source {
-            self.bot.irc_send_privmsg(config.as_str(), chan, msg)
+        if let IRC { .. } = self.source {
+            self.bot.irc_send_privmsg(&self.config, chan, msg)
         } else {
             Err(Error::new("ctx.irc_send_privmsg on non-IRC context"))
         }
     }
 
     pub fn irc_send_raw(&self, msg: &str) -> Result<()> {
-        if let IRC { ref config, .. } = self.source {
-            self.bot.irc_send_raw(config.as_str(), msg)
+        if let IRC { .. } = self.source {
+            self.bot.irc_send_raw(&self.config, msg)
         } else {
             Err(Error::new("ctx.irc_send_privmsg on non-IRC context"))
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Source {
     IRC {
-        config: String,
         prefix: Option<Prefix>,
         channel: Option<String>,
     },
     Discord {
-        user: serenity::User,
-        channel: serenity::ChannelId,
-        guild: Option<serenity::GuildId>,
+        user: serenitym::User,
+        channel: serenitym::ChannelId,
+        guild: Option<serenitym::GuildId>,
+
+        cache: serenity::cache::CacheRwLock,
+        http: Arc<serenity::http::Http>,
     },
 }
 
