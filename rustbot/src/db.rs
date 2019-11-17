@@ -1,28 +1,23 @@
+use config::PostgresConfig;
 use migrant_lib::config::PostgresSettingsBuilder;
 use postgres::{Connection, TlsMode};
-use std::env;
 
-pub fn open() -> Result<Connection, String> {
-    let conn_str = migrate().map_err(|e| format!("{}", e))?;
+pub fn open(pc: &PostgresConfig) -> Result<Connection, String> {
+    let conn_str = migrate(pc).map_err(|e| format!("{}", e))?;
     Connection::connect(conn_str, TlsMode::None).map_err(|e| format!("{}", e))
 }
 
-fn migrate() -> Result<String, Box<dyn std::error::Error>> {
-    let dir = env::current_dir().unwrap();
-    if let None = migrant_lib::search_for_settings_file(&dir) {
-        migrant_lib::Config::init_in(&dir)
-            .with_postgres_options(
-                PostgresSettingsBuilder::empty()
-                    .database_name("rustbot")
-                    .database_user("rustbot")
-                    .migration_location("migrations")?,
-            )
-            .initialize()?;
-    }
-    let config = match migrant_lib::search_for_settings_file(&dir) {
-        None => panic!("failed to find config we just set up?"),
-        Some(p) => migrant_lib::Config::from_settings_file(&p)?,
-    };
+fn migrate(pc: &PostgresConfig) -> Result<String, Box<dyn std::error::Error>> {
+    let config = migrant_lib::config::Config::with_settings(
+        &PostgresSettingsBuilder::empty()
+            .database_name(&pc.database)
+            .database_user(&pc.user)
+            .database_password(&pc.password)
+            .database_host(&pc.host)
+            .database_port(pc.port)
+            .build()?,
+    );
+
     config.setup()?;
     let config = config.reload()?;
 

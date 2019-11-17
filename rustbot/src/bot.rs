@@ -461,15 +461,15 @@ impl types::Bot for Rustbot {
 }
 
 pub fn start() -> Result<()> {
+    let config = config::load()?;
+
     let b = Arc::new(Rustbot {
         clients: RwLock::new(BTreeMap::new()),
         caches: RwLock::new(BTreeMap::new()),
-        db: Mutex::new(db::open().unwrap()),
+        db: Mutex::new(db::open(&config.postgres).unwrap()),
         modules: RwLock::new(BTreeMap::new()),
         commands: RwLock::new(BTreeMap::new()),
     });
-
-    let config = config::load()?;
 
     {
         let modules: Vec<String> = {

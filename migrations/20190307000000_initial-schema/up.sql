@@ -3,7 +3,7 @@
 -- CONFIGS
 CREATE TABLE configs (
 	id TEXT NOT NULL PRIMARY KEY,
-	cmdchars TEXT NOT NULL,
+	cmdchars TEXT NOT NULL
 );
 INSERT INTO configs VALUES ('irc', '!');
 INSERT INTO configs VALUES ('discord', '!');
