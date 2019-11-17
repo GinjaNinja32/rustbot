@@ -8,5 +8,9 @@ services:
   postgres:
     image: postgres:11.5-alpine
     restart: always
+    ports:
+      - 127.0.0.1:5432:5432
     volumes:
-      - postgres:/var/lib/postgres
+      - postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: changethis
