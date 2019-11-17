@@ -1,0 +1,12 @@
+version: '2'
+
+volumes:
+  postgres:
+    driver: local
+
+services:
+  postgres:
+    image: postgres:11.5-alpine
+    restart: always
+  volumes:
+    - postgres:/var/lib/postgres
