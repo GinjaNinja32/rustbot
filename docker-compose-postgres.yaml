@@ -8,5 +8,5 @@ services:
   postgres:
     image: postgres:11.5-alpine
     restart: always
-  volumes:
-    - postgres:/var/lib/postgres
+    volumes:
+      - postgres:/var/lib/postgres
