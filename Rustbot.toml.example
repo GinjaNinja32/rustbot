@@ -1,0 +1,25 @@
+# vim: ft=toml
+
+[postgres]
+database = "rustbot"
+user = "rustbot"
+password = "somepass"
+
+host = "localhost"
+port = 5432
+
+[[irc]]
+id = "irc"
+
+nick = "testbot"
+user = "testbot"
+real = "testbot"
+
+server = "some.irc.server"
+port = 6667
+ssl = false
+
+[[discord]]
+id = "discord"
+
+token = "your-discord-token-here"
