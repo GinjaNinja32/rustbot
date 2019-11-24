@@ -18,7 +18,9 @@ pub fn query(ctx: &Context, args: &str) -> Result<()> {
                         let vals: Vec<String> = (0..row.len())
                             .map(|i| {
                                 let ty = row.columns()[i].type_();
-                                if i8::accepts(ty) {
+                                if row.get_bytes(i).is_none() {
+                                    format!("null")
+                                } else if i8::accepts(ty) {
                                     format!("{}i8", row.get::<_, i8>(i))
                                 } else if i16::accepts(ty) {
                                     format!("{}i16", row.get::<_, i16>(i))

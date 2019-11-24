@@ -143,7 +143,7 @@ impl Rustbot {
                 )
                 VALUES (
                     (SELECT name FROM resolve ORDER BY depth DESC LIMIT 1),
-                    (to_jsonb(array(SELECT transform FROM resolve WHERE transform IS NOT NULL ORDER BY depth ASC)))
+                    (to_jsonb(array(SELECT transform::jsonb FROM resolve WHERE transform IS NOT NULL ORDER BY depth ASC)))
                 )",
                 &[&cmd],
             )?;
