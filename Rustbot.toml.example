@@ -23,3 +23,6 @@ ssl = false
 id = "discord"
 
 token = "your-discord-token-here"
+
+[module.weather]
+appid = "your-appid-here"
