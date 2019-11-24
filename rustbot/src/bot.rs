@@ -1,7 +1,7 @@
 use irc::client::ext::ClientExt;
 use irc::client::prelude as irc;
 use irc::client::prelude::Client;
-use libloading::{Library, Symbol};
+use libloading::Library;
 use parking_lot::{Mutex, RwLock};
 use postgres::types::FromSql;
 use postgres::Connection;
@@ -293,7 +293,7 @@ impl types::Bot for Rustbot {
             "INSERT INTO modules (name, enabled) VALUES ($1, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
             &[&name],
         )?;
-        let mut m = load_module(lib)?;
+        let mut m = load_module(name, lib)?;
         let mut commands = self.commands.write();
         m.rent_mut::<_, Result<()>>(|meta| {
             for command in meta.commands.iter() {
@@ -607,12 +607,20 @@ rental! {
     }
 }
 
-fn load_module(lib: Library) -> Result<rent_module::Module> {
+fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
     let m = rent_module::Module::try_new_or_drop(Box::new(lib), |lib| unsafe {
-        let sym: Symbol<Option<unsafe fn() -> Meta>> = lib.get(b"get_meta")?;
-        match Symbol::lift_option(sym) {
-            Some(f) => Ok(f()),
-            None => Err(Error::new("symbol not found")),
+        match lib.get::<unsafe fn() -> Meta>(b"get_meta") {
+            Ok(f) => Ok(f()),
+            Err(e) => match lib.get::<unsafe fn(toml::Value) -> Result<Meta>>(b"get_meta_conf") {
+                Ok(f) => {
+                    if let Some(c) = config::load()?.module.remove(name) {
+                        Ok(f(c)?)
+                    } else {
+                        Err(Error::new("required config not passed"))
+                    }
+                }
+                Err(e2) => Err(Error::new(&format!("{}, {}", e, e2))),
+            },
         }
     })?;
 

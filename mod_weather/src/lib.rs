@@ -7,93 +7,96 @@ extern crate rusqlite;
 extern crate rustbot;
 extern crate serde;
 extern crate serde_json;
+extern crate toml;
 
 mod airport;
 
 use chrono::NaiveDateTime;
 use rustbot::prelude::*;
 use serde::Deserialize;
+use std::sync::Arc;
 
-#[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
-    meta.cmd("weather", Command::new(weather));
-    meta
+#[derive(Deserialize)]
+struct Module {
+    appid: String,
 }
 
-fn weather(ctx: &Context, args: &str) -> Result<()> {
-    let appid: String = ctx
-        .bot
-        .sql()
-        .lock()
-        .query("SELECT appid FROM mod_weather_config", &[])?
-        .get(0)
-        .get(0);
-    let params = if let Some(coords) = airport::locate(args) {
-        vec![("lat", coords.lat), ("lon", coords.lon), ("APPID", appid)]
-    } else {
-        vec![("q", args.to_string()), ("APPID", appid)]
-    };
-    let client = reqwest::Client::new();
-    let mut result = client
-        .get("https://api.openweathermap.org/data/2.5/weather")
-        .query(&params)
-        .send()?;
+#[no_mangle]
+pub fn get_meta_conf(config: toml::Value) -> Result<Meta> {
+    let m: Module = config.try_into()?;
+    let mut meta = Meta::new();
+    meta.cmd("weather", Command::arc(Arc::new(move |ctx, args| m.weather(ctx, args))));
+    Ok(meta)
+}
 
-    match result.status().as_u16() {
-        200 => (),
-        404 => return ctx.say("could not find location"),
-        code => return ctx.say(&format!("error {}", code)),
+impl Module {
+    fn weather(&self, ctx: &Context, args: &str) -> Result<()> {
+        let params = if let Some(coords) = airport::locate(args) {
+            vec![("lat", coords.lat), ("lon", coords.lon), ("APPID", self.appid.clone())]
+        } else {
+            vec![("q", args.to_string()), ("APPID", self.appid.clone())]
+        };
+        let client = reqwest::Client::new();
+        let mut result = client
+            .get("https://api.openweathermap.org/data/2.5/weather")
+            .query(&params)
+            .send()?;
+
+        match result.status().as_u16() {
+            200 => (),
+            404 => return ctx.say("could not find location"),
+            code => return ctx.say(&format!("error {}", code)),
+        }
+
+        let text = result.text()?;
+        let data: Response = match serde_json::from_str(&text) {
+            Err(e) => {
+                println!("failed to unmarshal weather: {}:\n{}", e, text);
+                return Err(e.into());
+            }
+            Ok(v) => v,
+        };
+
+        let location = if let Some(country) = data.sys.country {
+            format!("{}, {}", data.name, country)
+        } else if data.name != "" {
+            data.name
+        } else {
+            "unknown location".to_string()
+        };
+
+        let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
+        let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
+        let temp = format!(
+            "{:.0} C ({:.0} F)",
+            data.main.temp - 273.15,
+            ((data.main.temp - 273.15) * 9.0 / 5.0) + 32.0
+        );
+        let direction = {
+            match data.wind.deg {
+                None => "".to_string(),
+                Some(d) => format!(" from the {}", text_for_angle(d)),
+            }
+        };
+
+        let wind = format!(
+            "{:.0} mph ({:.0} kph){}",
+            data.wind.speed * 2.23694,
+            data.wind.speed * 3.6,
+            direction,
+        );
+        let pressure = format!("{:.0} mb", data.main.pressure);
+        ctx.say(&format!(
+            "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
+            location,
+            timestamp,
+            weathers.join(", "),
+            temp,
+            data.main.humidity,
+            wind,
+            pressure
+        ))
     }
-
-    let text = result.text()?;
-    let data: Response = match serde_json::from_str(&text) {
-        Err(e) => {
-            println!("failed to unmarshal weather: {}:\n{}", e, text);
-            return Err(e.into());
-        }
-        Ok(v) => v,
-    };
-
-    let location = if let Some(country) = data.sys.country {
-        format!("{}, {}", data.name, country)
-    } else if data.name != "" {
-        data.name
-    } else {
-        "unknown location".to_string()
-    };
-
-    let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
-    let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
-    let temp = format!(
-        "{:.0} C ({:.0} F)",
-        data.main.temp - 273.15,
-        ((data.main.temp - 273.15) * 9.0 / 5.0) + 32.0
-    );
-    let direction = {
-        match data.wind.deg {
-            None => "".to_string(),
-            Some(d) => format!(" from the {}", text_for_angle(d)),
-        }
-    };
-
-    let wind = format!(
-        "{:.0} mph ({:.0} kph){}",
-        data.wind.speed * 2.23694,
-        data.wind.speed * 3.6,
-        direction,
-    );
-    let pressure = format!("{:.0} mb", data.main.pressure);
-    ctx.say(&format!(
-        "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
-        location,
-        timestamp,
-        weathers.join(", "),
-        temp,
-        data.main.humidity,
-        wind,
-        pressure
-    ))
 }
 
 fn text_for_angle(angle: f64) -> String {

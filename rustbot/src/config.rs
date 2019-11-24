@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::fs;
 
 use prelude::*;
@@ -9,6 +10,8 @@ pub struct Config {
 
     pub irc: Vec<IRCConfig>,
     pub discord: Vec<DiscordConfig>,
+
+    pub module: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
