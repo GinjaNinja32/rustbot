@@ -22,11 +22,10 @@ struct Module {
 }
 
 #[no_mangle]
-pub fn get_meta_conf(config: toml::Value) -> Result<Meta> {
+pub fn get_meta_conf(meta: &mut dyn Meta, config: toml::Value) -> Result<()> {
     let m: Module = config.try_into()?;
-    let mut meta = Meta::new();
     meta.cmd("weather", Command::arc(Arc::new(move |ctx, args| m.weather(ctx, args))));
-    Ok(meta)
+    Ok(())
 }
 
 impl Module {

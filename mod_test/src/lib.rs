@@ -3,8 +3,7 @@ extern crate rustbot;
 use rustbot::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd(
         "test",
         Command::new(|ctx, args| {
@@ -12,5 +11,4 @@ pub fn get_meta() -> Meta {
             ctx.say(&format!("you passed: {}", args))
         }),
     );
-    meta
 }

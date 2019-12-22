@@ -3,8 +3,7 @@ extern crate rustbot;
 use rustbot::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("8ball", Command::new(|ctx, args| randomlist("eightball", ctx, args)));
     meta.cmd("kitty", Command::new(|ctx, args| randomlist("kitty", ctx, args)));
     meta.cmd("fox", Command::new(|ctx, args| randomlist("fox", ctx, args)));
@@ -12,7 +11,6 @@ pub fn get_meta() -> Meta {
     meta.cmd("otter", Command::new(|ctx, args| randomlist("otter", ctx, args)));
     meta.cmd("doggo", Command::new(|ctx, args| randomlist("doggo", ctx, args)));
     meta.cmd("delrand", Command::new(delrand).req_perms(Perms::Admin));
-    meta
 }
 
 fn delrand(ctx: &Context, args: &str) -> Result<()> {

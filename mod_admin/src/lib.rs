@@ -9,9 +9,7 @@ mod db;
 mod raw;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
-
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("raw", Command::new(raw::raw).req_perms(Perms::Raw));
     meta.cmd("join", Command::new(raw::join).req_perms(Perms::Raw));
     meta.cmd("part", Command::new(raw::part).req_perms(Perms::Raw));
@@ -24,8 +22,6 @@ pub fn get_meta() -> Meta {
 
     meta.cmd("bash", Command::new(bash::bash).req_perms(Perms::Eval));
     meta.cmd("bashl", Command::new(bash::bashl).req_perms(Perms::Eval));
-
-    meta
 }
 
 fn whoami(ctx: &Context, _: &str) -> Result<()> {

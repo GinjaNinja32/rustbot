@@ -1,8 +1,22 @@
+extern crate irc;
+extern crate libloading;
+extern crate migrant_lib;
 extern crate parking_lot;
+extern crate postgres;
+extern crate regex;
 extern crate rustbot;
+extern crate serde;
+extern crate serde_json;
+extern crate serenity;
+#[macro_use]
+extern crate rental;
+
+mod bot;
+mod config;
+mod db;
 
 fn main() {
-    match rustbot::bot::start() {
+    match bot::start() {
         Ok(()) => start_deadlock_monitor(),
         Err(e) => Err(e).unwrap(),
     }

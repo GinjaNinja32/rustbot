@@ -8,10 +8,8 @@ mod dice;
 use rustbot::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("dice", Command::new(cmd_dice));
-    meta
 }
 
 fn cmd_dice(ctx: &Context, args: &str) -> Result<()> {

@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fs;
 
-use prelude::*;
+use rustbot::prelude::*;
 
 #[derive(Deserialize)]
 pub struct Config {

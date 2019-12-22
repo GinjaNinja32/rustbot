@@ -19,8 +19,8 @@ use std::time::{Duration, Instant};
 
 use config;
 use db;
-use prelude::*;
-use types;
+use rustbot::prelude::*;
+use rustbot::types;
 
 struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
@@ -597,24 +597,30 @@ impl dis::EventHandler for DiscordBot {
 use bot::rent_module::Module;
 rental! {
     mod rent_module {
-        use types;
+        use crate::bot;
 
         #[rental]
         pub struct Module {
             lib: Box<libloading::Library>,
-            meta: types::Meta,
+            meta: bot::Meta,
         }
     }
 }
 
 fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
     let m = rent_module::Module::try_new_or_drop(Box::new(lib), |lib| unsafe {
-        match lib.get::<unsafe fn() -> Meta>(b"get_meta") {
-            Ok(f) => Ok(f()),
-            Err(e) => match lib.get::<unsafe fn(toml::Value) -> Result<Meta>>(b"get_meta_conf") {
+        match lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") {
+            Ok(f) => {
+                let mut m = Meta::new();
+                f(&mut m);
+                Ok(m)
+            }
+            Err(e) => match lib.get::<unsafe fn(&mut dyn types::Meta, toml::Value) -> Result<()>>(b"get_meta_conf") {
                 Ok(f) => {
                     if let Some(c) = config::load()?.module.remove(name) {
-                        Ok(f(c)?)
+                        let mut m = Meta::new();
+                        f(&mut m, c)?;
+                        Ok(m)
                     } else {
                         Err(Error::new("required config not passed"))
                     }
@@ -625,4 +631,27 @@ fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
     })?;
 
     Ok(m)
+}
+
+pub struct Meta {
+    commands: BTreeMap<String, Command>,
+    deinit: Option<Box<DeinitFn>>,
+}
+
+impl Meta {
+    fn new() -> Self {
+        Self {
+            commands: BTreeMap::new(),
+            deinit: None,
+        }
+    }
+}
+
+impl types::Meta for Meta {
+    fn cmd(&mut self, name: &str, cmd: Command) {
+        self.commands.insert(name.to_string(), cmd);
+    }
+    fn deinit(&mut self, f: Box<DeinitFn>) {
+        self.deinit = Some(f)
+    }
 }

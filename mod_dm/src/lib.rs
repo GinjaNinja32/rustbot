@@ -8,8 +8,7 @@ use std::io::prelude::*;
 use std::process::Command as ProcessCommand;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("dm", Command::new(|ctx, args| dm(ctx, args, false, false)));
     meta.cmd("dml", Command::new(|ctx, args| dm(ctx, args, false, true)));
     meta.cmd(
@@ -20,7 +19,6 @@ pub fn get_meta() -> Meta {
         "dmsl",
         Command::new(|ctx, args| dm(ctx, args, true, true)).req_perms(Perms::Eval),
     );
-    meta
 }
 
 fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {

@@ -81,24 +81,9 @@ impl Command {
 
 pub type DeinitFn = dyn FnMut(&dyn Bot) -> Result<()> + Send + Sync;
 
-pub struct Meta {
-    pub(crate) commands: BTreeMap<String, Command>,
-    pub(crate) deinit: Option<Box<DeinitFn>>,
-}
-
-impl Meta {
-    pub fn new() -> Meta {
-        Meta {
-            commands: BTreeMap::new(),
-            deinit: None,
-        }
-    }
-    pub fn cmd(&mut self, name: &str, cmd: Command) {
-        self.commands.insert(name.to_string(), cmd);
-    }
-    pub fn deinit(&mut self, f: Box<DeinitFn>) {
-        self.deinit = Some(f)
-    }
+pub trait Meta {
+    fn cmd(&mut self, name: &str, cmd: Command);
+    fn deinit(&mut self, f: Box<DeinitFn>);
 }
 
 pub trait Bot {

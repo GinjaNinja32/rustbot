@@ -5,8 +5,7 @@ use std::process::Command as ProcessCommand;
 use std::str;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("drop", Command::new(drop).req_perms(Perms::Modules));
     meta.cmd("load", Command::new(load).req_perms(Perms::Modules));
     meta.cmd("reload", Command::new(reload).req_perms(Perms::Modules));
@@ -19,7 +18,6 @@ pub fn get_meta() -> Meta {
         "disable",
         Command::new(move |ctx, args| set_enabled(ctx, args, false)).req_perms(Perms::Modules),
     );
-    meta
 }
 
 fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Result<()> {
