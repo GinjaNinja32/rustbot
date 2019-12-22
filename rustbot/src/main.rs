@@ -4,7 +4,7 @@ extern crate rustbot;
 fn main() {
     match rustbot::bot::start() {
         Ok(()) => start_deadlock_monitor(),
-        Err(e) => println!("error: {}", e),
+        Err(e) => Err(e).unwrap(),
     }
 }
 

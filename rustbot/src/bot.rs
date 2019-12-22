@@ -466,7 +466,7 @@ pub fn start() -> Result<()> {
     let b = Arc::new(Rustbot {
         clients: RwLock::new(BTreeMap::new()),
         caches: RwLock::new(BTreeMap::new()),
-        db: Mutex::new(db::open(&config.postgres).unwrap()),
+        db: Mutex::new(db::open(&config.postgres)?),
         modules: RwLock::new(BTreeMap::new()),
         commands: RwLock::new(BTreeMap::new()),
     });
