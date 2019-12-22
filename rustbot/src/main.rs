@@ -15,6 +15,7 @@ mod bot;
 mod config;
 mod context;
 mod db;
+mod message;
 
 fn main() {
     match bot::start() {

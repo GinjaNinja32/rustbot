@@ -1,4 +1,5 @@
 use crate::bot;
+use crate::message;
 use rustbot::prelude::*;
 use rustbot::types;
 use serenity::model::prelude as ser;
@@ -33,11 +34,11 @@ impl<'a> types::Context for Context<'a> {
                 if let Some(ch) = channel {
                     if let Some(User { nick, .. }) = prefix {
                         if *ch == self.bot_name {
-                            for msg in message.format_irc()? {
+                            for msg in message::format_irc(message)? {
                                 self.bot.irc_send_privmsg(&self.config, nick.as_str(), msg.as_str())?;
                             }
                         } else {
-                            for msg in message.format_irc()? {
+                            for msg in message::format_irc(message)? {
                                 self.bot.irc_send_privmsg(
                                     &self.config,
                                     ch.as_str(),
@@ -49,7 +50,7 @@ impl<'a> types::Context for Context<'a> {
                 }
             }
             Discord { channel, http, .. } => {
-                channel.say(http, message.format_discord()?).map(|_| ())?;
+                channel.say(http, message::format_discord(message)?).map(|_| ())?;
             }
         }
 
