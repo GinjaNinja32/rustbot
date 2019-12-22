@@ -82,7 +82,7 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
 fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
     let a = args.split(' ').collect::<Vec<&str>>();
     if a.len() < 2 {
-        return Err(Error::new("Usage: (enable/disable) config_id module [module [...]]"));
+        return Err("Usage: (enable/disable) config_id module [module [...]]".into());
     }
 
     let config_id = a[0];

@@ -4,13 +4,13 @@ use parking_lot::Mutex;
 use postgres::types::FromSql;
 use postgres::Connection;
 use serenity::model::prelude as serenitym;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use error::*;
 use types::Message::*;
 use types::Prefix::*;
 use types::Source::*;
+
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 bitflags! {
     pub struct Perms: u64 {
@@ -193,22 +193,6 @@ impl<'a> Context<'a> {
     }
     pub fn perms(&self) -> Result<Perms> {
         self.bot.perms(&self.config, &self.source)
-    }
-
-    pub fn irc_send_privmsg(&self, chan: &str, msg: &str) -> Result<()> {
-        if let IRC { .. } = self.source {
-            self.bot.irc_send_privmsg(&self.config, chan, msg)
-        } else {
-            Err(Error::new("ctx.irc_send_privmsg on non-IRC context"))
-        }
-    }
-
-    pub fn irc_send_raw(&self, msg: &str) -> Result<()> {
-        if let IRC { .. } = self.source {
-            self.bot.irc_send_raw(&self.config, msg)
-        } else {
-            Err(Error::new("ctx.irc_send_privmsg on non-IRC context"))
-        }
     }
 }
 

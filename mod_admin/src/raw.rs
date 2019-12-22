@@ -3,7 +3,7 @@ use rustbot::prelude::*;
 pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
     let mut args: Vec<&str> = args.splitn(4, " ").collect();
     if args.len() != 4 {
-        return Err(Error::new("usage: dmsg <config_id> <guild> <channel> <message...>"));
+        return Err("usage: dmsg <config_id> <guild> <channel> <message...>".into());
     }
 
     if args[2].chars().collect::<Vec<char>>()[0] == '#' {
@@ -16,44 +16,50 @@ pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
 pub fn imsg(ctx: &Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, " ").collect();
     if args.len() != 3 {
-        return Err(Error::new("usage: imsg <config_id> <channel> <message...>"));
+        return Err("usage: imsg <config_id> <channel> <message...>".into());
     }
 
     ctx.bot.irc_send_privmsg(args[0], args[1], args[2])
 }
 
 pub fn raw(ctx: &Context, args: &str) -> Result<()> {
-    ctx.irc_send_raw(args)
+    let args: Vec<&str> = args.splitn(2, " ").collect();
+    if args.len() != 2 {
+        return Err("usage: raw <config_id> <message...>".into());
+    }
+
+    ctx.bot.irc_send_raw(args[0], args[1])
 }
 
 pub fn join(ctx: &Context, args: &str) -> Result<()> {
-    if let IRC { .. } = ctx.source {
-    } else {
-        return Err(Error::new("must use this command from IRC"));
+    let args: Vec<&str> = args.splitn(3, " ").collect();
+    if args.len() != 2 {
+        return Err("usage: raw <config_id> <channel>".into());
     }
+
     {
         let db = ctx.bot.sql().lock();
         db.execute(
             "INSERT INTO irc_channels (channel, config_id) VALUES ($1, $2) ON CONFLICT (channel, config_id) DO NOTHING",
-            &[&args, &ctx.config],
+            &[&args[1], &ctx.config],
         )?;
     }
-    ctx.irc_send_raw(&format!("JOIN {}", args))?;
+    ctx.bot.irc_send_raw(args[0], &format!("JOIN {}", args[1]))?;
     ctx.say("done")
 }
 
 pub fn part(ctx: &Context, args: &str) -> Result<()> {
-    if let IRC { .. } = ctx.source {
-    } else {
-        return Err(Error::new("must use this command from IRC"));
+    let args: Vec<&str> = args.splitn(3, " ").collect();
+    if args.len() != 2 {
+        return Err("usage: raw <config_id> <channel>".into());
     }
     {
         let db = ctx.bot.sql().lock();
         db.execute(
             "DELETE FROM irc_channels WHERE channel = $1 AND config_id = $2",
-            &[&args, &ctx.config],
+            &[&args[0], &ctx.config],
         )?;
     }
-    ctx.irc_send_raw(&format!("part {}", args))?;
+    ctx.bot.irc_send_raw(args[0], &format!("part {}", args[1]))?;
     ctx.say("done")
 }

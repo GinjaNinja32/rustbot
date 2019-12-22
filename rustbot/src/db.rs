@@ -2,12 +2,15 @@ use config::PostgresConfig;
 use migrant_lib::config::PostgresSettingsBuilder;
 use postgres::{Connection, TlsMode};
 
-pub fn open(pc: &PostgresConfig) -> Result<Connection, String> {
-    let conn_str = migrate(pc).map_err(|e| format!("{}", e))?;
-    Connection::connect(conn_str, TlsMode::None).map_err(|e| format!("{}", e))
+use rustbot::prelude::*;
+
+pub fn open(pc: &PostgresConfig) -> Result<Connection> {
+    let conn_str = migrate(pc)?;
+    let conn = Connection::connect(conn_str, TlsMode::None)?;
+    Ok(conn)
 }
 
-fn migrate(pc: &PostgresConfig) -> Result<String, Box<dyn std::error::Error>> {
+fn migrate(pc: &PostgresConfig) -> Result<String> {
     let config = migrant_lib::config::Config::with_settings(
         &PostgresSettingsBuilder::empty()
             .database_name(&pc.database)

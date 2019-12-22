@@ -148,7 +148,7 @@ impl Rustbot {
                 &[&cmd],
             )?;
             if rows.is_empty() {
-                return Err(Error::new("failed to resolve alias: no result rows?"));
+                return Err("failed to resolve alias: no result rows?".into());
             }
             let row = rows.get(0);
 
@@ -358,25 +358,25 @@ impl types::Bot for Rustbot {
 
     fn irc_send_privmsg(&self, cfg: &str, channel: &str, message: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
-            client.send_privmsg(channel, message)?;
+            client.send_privmsg(channel, message).map_err(from_irc)?;
             Ok(())
         } else {
-            Err(Error::new("invalid configid"))
+            Err("invalid configid".into())
         }
     }
 
     fn irc_send_raw(&self, cfg: &str, line: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
-            client.send(line)?;
+            client.send(line).map_err(from_irc)?;
             Ok(())
         } else {
-            Err(Error::new("invalid configid"))
+            Err("invalid configid".into())
         }
     }
 
     fn dis_send_message(&self, config: &str, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
         let cache_and_http = match self.caches.read().get(config) {
-            None => return Err(Error::new(&format!("no cache found for config {:?}", config))),
+            None => return Err(format!("no cache found for config {:?}", config).into()),
             Some(c) => Arc::clone(&c),
         };
 
@@ -396,7 +396,7 @@ impl types::Bot for Rustbot {
                 v
             }
         }
-        .ok_or_else(|| Error::new("guild not found"))?
+        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "guild not found".into())?
         .read();
 
         let chanid = {
@@ -417,7 +417,7 @@ impl types::Bot for Rustbot {
                 v
             }
         }
-        .ok_or_else(|| Error::new("channel not found"))?;
+        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "channel not found".into())?;
 
         if process {
             let mut message = message.to_string();
@@ -501,28 +501,33 @@ pub fn start() -> Result<()> {
             .name(format!("IRC: {}", irc_descriptor(&c)))
             .spawn(move || {
                 run_with_backoff(&format!("IRC connection for {}", c.id), &|| {
-                    let client = Arc::new(irc::IrcClient::from_config(irc::Config {
-                        nickname: Some(c.nick.clone()),
-                        username: Some(c.user.clone()),
-                        realname: Some(c.real.clone()),
-                        server: Some(c.server.clone()),
-                        port: Some(c.port),
-                        use_ssl: Some(c.ssl),
-                        channels: Some(channels.clone()),
-                        ..Default::default()
-                    })?);
-                    client.send_cap_req(&[irc::Capability::MultiPrefix])?;
-                    client.identify()?;
+                    let client = Arc::new(
+                        irc::IrcClient::from_config(irc::Config {
+                            nickname: Some(c.nick.clone()),
+                            username: Some(c.user.clone()),
+                            realname: Some(c.real.clone()),
+                            server: Some(c.server.clone()),
+                            port: Some(c.port),
+                            use_ssl: Some(c.ssl),
+                            channels: Some(channels.clone()),
+                            ..Default::default()
+                        })
+                        .map_err(from_irc)?,
+                    );
+                    client.send_cap_req(&[irc::Capability::MultiPrefix]).map_err(from_irc)?;
+                    client.identify().map_err(from_irc)?;
                     b.clients.write().insert(c.id.clone(), client.clone());
                     println!("connect: {}", irc_descriptor(&c));
-                    client.for_each_incoming(|irc_msg| {
-                        let b = b.clone();
-                        let id = c.id.clone();
-                        rayon::spawn(move || {
-                            let client = { b.clients.read().get(&id).unwrap().clone() };
-                            b.irc_incoming(id.clone(), client.current_nickname(), irc_msg);
-                        });
-                    })?;
+                    client
+                        .for_each_incoming(|irc_msg| {
+                            let b = b.clone();
+                            let id = c.id.clone();
+                            rayon::spawn(move || {
+                                let client = { b.clients.read().get(&id).unwrap().clone() };
+                                b.irc_incoming(id.clone(), client.current_nickname(), irc_msg);
+                            });
+                        })
+                        .map_err(from_irc)?;
                     Ok(())
                 });
             })?;
@@ -608,7 +613,7 @@ rental! {
 }
 
 fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
-    let m = rent_module::Module::try_new_or_drop(Box::new(lib), |lib| unsafe {
+    let m = rent_module::Module::try_new_or_drop::<_, Box<dyn std::error::Error>>(Box::new(lib), |lib| unsafe {
         match lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") {
             Ok(f) => {
                 let mut m = Meta::new();
@@ -622,10 +627,10 @@ fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
                         f(&mut m, c)?;
                         Ok(m)
                     } else {
-                        Err(Error::new("required config not passed"))
+                        Err("required config not passed".into())
                     }
                 }
-                Err(e2) => Err(Error::new(&format!("{}, {}", e, e2))),
+                Err(e2) => Err(format!("{}, {}", e, e2).into()),
             },
         }
     })?;
@@ -654,4 +659,8 @@ impl types::Meta for Meta {
     fn deinit(&mut self, f: Box<DeinitFn>) {
         self.deinit = Some(f)
     }
+}
+
+fn from_irc(e: crate::irc::error::IrcError) -> Box<dyn std::error::Error> {
+    format!("{}", e).into()
 }

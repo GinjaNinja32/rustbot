@@ -11,7 +11,7 @@ pub fn bashl(ctx: &Context, args: &str) -> Result<()> {
 
 fn do_bash(ctx: &Context, args: &str, oneline: bool) -> Result<()> {
     if cfg!(target_os = "windows") {
-        return Err(Error::new("unsupported"));
+        return Err("unsupported".into());
     }
 
     let result = Command::new("bash").arg("-c").arg(args).output()?;
