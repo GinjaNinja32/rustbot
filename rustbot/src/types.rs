@@ -3,12 +3,9 @@
 use parking_lot::Mutex;
 use postgres::types::FromSql;
 use postgres::Connection;
-use serenity::model::prelude as serenitym;
 use std::sync::Arc;
 
 use types::Message::*;
-use types::Prefix::*;
-use types::Source::*;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -48,7 +45,7 @@ impl FromSql for Perms {
     }
 }
 
-pub type CommandFn = dyn Fn(&Context, &str) -> Result<()> + Send + Sync;
+pub type CommandFn = dyn Fn(&dyn Context, &str) -> Result<()> + Send + Sync;
 #[derive(Clone)]
 pub struct Command {
     pub function: Arc<CommandFn>,
@@ -56,7 +53,7 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new(f: fn(&Context, &str) -> Result<()>) -> Self {
+    pub fn new(f: fn(&dyn Context, &str) -> Result<()>) -> Self {
         Self::arc(Arc::new(f))
     }
     pub fn arc(f: Arc<CommandFn>) -> Self {
@@ -70,7 +67,7 @@ impl Command {
         s.req_perms.insert(p);
         s
     }
-    pub fn call(&self, ctx: &Context, args: &str) -> Result<()> {
+    pub fn call(&self, ctx: &dyn Context, args: &str) -> Result<()> {
         if !ctx.perms()?.contains(self.req_perms) {
             return Ok(());
         }
@@ -89,7 +86,6 @@ pub trait Meta {
 pub trait Bot {
     fn load_module(&self, &str) -> Result<()>;
     fn drop_module(&self, &str) -> Result<()>;
-    fn perms(&self, &str, &Source) -> Result<Perms>;
     fn sql(&self) -> &Mutex<Connection>;
 
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
@@ -98,11 +94,12 @@ pub trait Bot {
     fn dis_send_message(&self, &str, &str, &str, &str, bool) -> Result<()>;
 }
 
-pub struct Context<'a> {
-    pub bot: &'a (dyn Bot + Sync),
-    pub config: String,
-    pub source: Source,
-    pub bot_name: String,
+pub trait Context {
+    fn bot(&self) -> &(dyn Bot + Sync);
+    fn say(&self, &str) -> Result<()>;
+    fn reply(&self, Message) -> Result<()>;
+    fn perms(&self) -> Result<Perms>;
+    fn source_str(&self) -> String;
 }
 
 pub enum Message {
@@ -128,7 +125,7 @@ fn paste_max_lines(input: String, max_lines: usize) -> Result<(Vec<String>, Opti
 }
 
 impl Message {
-    fn format_irc(self) -> Result<Vec<String>> {
+    pub fn format_irc(self) -> Result<Vec<String>> {
         match self {
             Simple(s) | Code(s) => match paste_max_lines(s, 3)? {
                 (lines, None) => Ok(lines),
@@ -139,7 +136,7 @@ impl Message {
             },
         }
     }
-    fn format_discord(self) -> Result<String> {
+    pub fn format_discord(self) -> Result<String> {
         match self {
             Simple(s) => match paste_max_lines(s, 11)? {
                 (lines, None) => Ok(lines.join("\n")),
@@ -155,74 +152,6 @@ impl Message {
                     }
                 }
             }
-        }
-    }
-}
-
-impl<'a> Context<'a> {
-    pub fn say(&self, message: &str) -> Result<()> {
-        self.reply(Message::Simple(message.to_string()))
-    }
-    pub fn reply(&self, message: Message) -> Result<()> {
-        match &self.source {
-            IRC { prefix, channel } => {
-                if let Some(ch) = channel {
-                    if let Some(User { nick, .. }) = prefix {
-                        if *ch == self.bot_name {
-                            for msg in message.format_irc()? {
-                                self.bot.irc_send_privmsg(&self.config, nick.as_str(), msg.as_str())?;
-                            }
-                        } else {
-                            for msg in message.format_irc()? {
-                                self.bot.irc_send_privmsg(
-                                    &self.config,
-                                    ch.as_str(),
-                                    &format!("{}: {}", nick.as_str(), msg.as_str()),
-                                )?;
-                            }
-                        }
-                    }
-                }
-            }
-            Discord { channel, http, .. } => {
-                channel.say(http, message.format_discord()?).map(|_| ())?;
-            }
-        }
-
-        Ok(())
-    }
-    pub fn perms(&self) -> Result<Perms> {
-        self.bot.perms(&self.config, &self.source)
-    }
-}
-
-#[derive(Clone)]
-pub enum Source {
-    IRC {
-        prefix: Option<Prefix>,
-        channel: Option<String>,
-    },
-    Discord {
-        user: serenitym::User,
-        channel: serenitym::ChannelId,
-        guild: Option<serenitym::GuildId>,
-
-        cache: serenity::cache::CacheRwLock,
-        http: Arc<serenity::http::Http>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum Prefix {
-    Server(String),
-    User { nick: String, user: String, host: String },
-}
-
-impl std::fmt::Display for Prefix {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        match self {
-            Server(s) => write!(f, "{}", s),
-            User { nick, user, host } => write!(f, "{}!{}@{}", nick, user, host),
         }
     }
 }

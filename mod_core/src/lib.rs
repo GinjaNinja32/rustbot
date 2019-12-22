@@ -35,17 +35,17 @@ fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Re
 }
 
 fn drop(ctx: &Context, args: &str) -> Result<()> {
-    exec(ctx, args, |ctx, m| ctx.bot.drop_module(m))
+    exec(ctx, args, |ctx, m| ctx.bot().drop_module(m))
 }
 
 fn load(ctx: &Context, args: &str) -> Result<()> {
-    exec(ctx, args, |ctx, m| ctx.bot.load_module(m))
+    exec(ctx, args, |ctx, m| ctx.bot().load_module(m))
 }
 
 fn reload(ctx: &Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| {
-        ctx.bot.drop_module(m)?;
-        ctx.bot.load_module(m)
+        ctx.bot().drop_module(m)?;
+        ctx.bot().load_module(m)
     })
 }
 
@@ -88,7 +88,7 @@ fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
     let config_id = a[0];
 
     for m in &a[1..] {
-        let db = ctx.bot.sql().lock();
+        let db = ctx.bot().sql().lock();
         if target {
             db.execute(
                 "INSERT INTO enabled_modules (config_id, name) VALUES ($1, $2)",

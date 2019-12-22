@@ -18,11 +18,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use config;
+use context;
+use context::Prefix::*;
 use db;
 use rustbot::prelude::*;
 use rustbot::types;
 
-struct Rustbot {
+pub struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
     caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
     db: Mutex<postgres::Connection>,
@@ -31,7 +33,7 @@ struct Rustbot {
 }
 
 impl Rustbot {
-    fn irc_parse_prefix(&self, prefix: Option<String>) -> Option<Prefix> {
+    fn irc_parse_prefix(&self, prefix: Option<String>) -> Option<context::Prefix> {
         match prefix {
             None => None,
             Some(s) => {
@@ -57,11 +59,11 @@ impl Rustbot {
 
     fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
         if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
-            let source = IRC {
+            let source = context::IRC {
                 prefix: self.irc_parse_prefix(irc_msg.prefix),
                 channel: Some(channel),
             };
-            let ctx = &Context {
+            let ctx = &context::Context {
                 bot: self,
                 config: cfg,
                 source: source,
@@ -72,10 +74,10 @@ impl Rustbot {
     }
 
     fn dis_incoming(&self, cfg: String, disctx: dis::Context, msg: channel::Message) {
-        let ctx = &Context {
+        let ctx = &context::Context {
             bot: self,
             config: cfg,
-            source: Discord {
+            source: context::Discord {
                 user: msg.author,
                 channel: msg.channel_id,
                 guild: msg.guild_id,
@@ -89,7 +91,7 @@ impl Rustbot {
         Rustbot::handle(self, ctx, msg.content.as_str());
     }
 
-    fn handle(&self, ctx: &Context, message: &str) {
+    fn handle(&self, ctx: &context::Context, message: &str) {
         match self.handle_inner(ctx, message) {
             Ok(()) => (),
             Err(err) => {
@@ -100,9 +102,9 @@ impl Rustbot {
         }
     }
 
-    fn handle_inner(&self, ctx: &Context, message: &str) -> Result<()> {
+    fn handle_inner(&self, ctx: &context::Context, message: &str) -> Result<()> {
         let cmdchars: String = {
-            let db = ctx.bot.sql().lock();
+            let db = ctx.bot().sql().lock();
             db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?
                 .get(0)
                 .get(0)
@@ -117,7 +119,7 @@ impl Rustbot {
             let res = self.commands.read().get(&cmd).cloned();
             if let Some((m, f)) = res {
                 {
-                    let db = ctx.bot.sql().lock();
+                    let db = ctx.bot().sql().lock();
                     if db.query("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND name = $2 AND modules.enabled", &[&ctx.config, &m])?.is_empty() {
                         return Ok(());
                     }
@@ -303,53 +305,6 @@ impl types::Bot for Rustbot {
         })?;
         self.modules.write().insert(name.to_string(), m);
         Ok(())
-    }
-
-    fn perms(&self, config: &str, who: &Source) -> Result<Perms> {
-        match who {
-            IRC {
-                prefix: Some(User { nick, user, host }),
-                ..
-            } => {
-                let perms: Perms = match self.db.lock().query(
-                    "SELECT flags FROM irc_permissions WHERE config_id = $1 AND nick = $2 AND username = $3 AND host = $4",
-                    &[&config, &nick, &user, &host],
-                ) {
-                    Err(e) => {
-                        println!("error: {}", e);
-                        Perms::None
-                    }
-                    Ok(v) => {
-                        if v.is_empty() {
-                            Perms::None
-                        } else {
-                            v.get(0).get(0)
-                        }
-                    }
-                };
-                Ok(perms)
-            }
-            Discord { user, .. } => {
-                let perms: Perms = match self.db.lock().query(
-                    "SELECT flags FROM dis_permissions WHERE config_id = $1 AND user_id = $2",
-                    &[&config, &(*user.id.as_u64() as i64)],
-                ) {
-                    Err(e) => {
-                        println!("error: {}", e);
-                        Perms::None
-                    }
-                    Ok(v) => {
-                        if v.is_empty() {
-                            Perms::None
-                        } else {
-                            v.get(0).get(0)
-                        }
-                    }
-                };
-                Ok(perms)
-            }
-            _ => Ok(Perms::None),
-        }
     }
 
     fn sql(&self) -> &Mutex<Connection> {

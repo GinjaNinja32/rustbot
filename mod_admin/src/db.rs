@@ -4,12 +4,16 @@ use postgres::types::FromSql;
 
 pub fn query(ctx: &Context, args: &str) -> Result<()> {
     let result: String = {
-        let db = ctx.bot.sql().lock();
+        let db = ctx.bot().sql().lock();
         let r = db.prepare(args).and_then(|stmt| {
             if stmt.columns().len() == 0 {
                 db.execute(args, &[]).map(|n| format!("{} row(s) changed", n))
             } else {
-                let cols: Vec<String> = stmt.columns().iter().map(|s| format!("{} {}", s.name(), s.type_().name())).collect();
+                let cols: Vec<String> = stmt
+                    .columns()
+                    .iter()
+                    .map(|s| format!("{} {}", s.name(), s.type_().name()))
+                    .collect();
                 let colstr = format!("({})", cols.join(", "));
                 let row_strs: Vec<String> = stmt
                     .query(&[])?

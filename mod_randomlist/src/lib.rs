@@ -19,7 +19,7 @@ fn delrand(ctx: &Context, args: &str) -> Result<()> {
         return ctx.say("usage: delrand <category> <string>");
     }
 
-    let n = ctx.bot.sql().lock().execute(
+    let n = ctx.bot().sql().lock().execute(
         "DELETE FROM mod_randomlist WHERE category = $1 AND string = $2",
         &[&parts[0], &parts[1]],
     )?;
@@ -33,7 +33,7 @@ fn delrand(ctx: &Context, args: &str) -> Result<()> {
 fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() == 2 && parts[0] == "add" {
-        let n = ctx.bot.sql().lock().execute(
+        let n = ctx.bot().sql().lock().execute(
             "INSERT INTO mod_randomlist (category, string) VALUES ($1, $2) ON CONFLICT (category, string) DO NOTHING",
             &[&what, &parts[1]],
         )?;
@@ -43,7 +43,7 @@ fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
         return ctx.say("Added.");
     }
 
-    let db = ctx.bot.sql().lock();
+    let db = ctx.bot().sql().lock();
     let rows = db
             .query("SELECT string FROM mod_randomlist WHERE category = $1 LIMIT 1 OFFSET FLOOR(RANDOM() * GREATEST((SELECT COUNT(*) FROM mod_randomlist WHERE category = $1), 1) )", &[&what])?;
     if rows.is_empty() {

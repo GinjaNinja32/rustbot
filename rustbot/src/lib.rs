@@ -9,7 +9,5 @@ extern crate toml;
 pub mod types;
 
 pub mod prelude {
-    pub use types::Prefix::*;
-    pub use types::Source::*;
     pub use types::*;
 }

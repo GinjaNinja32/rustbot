@@ -10,7 +10,7 @@ pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
         args[2] = &args[2][1..];
     }
 
-    ctx.bot.dis_send_message(args[0], args[1], args[2], args[3], true)
+    ctx.bot().dis_send_message(args[0], args[1], args[2], args[3], true)
 }
 
 pub fn imsg(ctx: &Context, args: &str) -> Result<()> {
@@ -19,7 +19,7 @@ pub fn imsg(ctx: &Context, args: &str) -> Result<()> {
         return Err("usage: imsg <config_id> <channel> <message...>".into());
     }
 
-    ctx.bot.irc_send_privmsg(args[0], args[1], args[2])
+    ctx.bot().irc_send_privmsg(args[0], args[1], args[2])
 }
 
 pub fn raw(ctx: &Context, args: &str) -> Result<()> {
@@ -28,7 +28,7 @@ pub fn raw(ctx: &Context, args: &str) -> Result<()> {
         return Err("usage: raw <config_id> <message...>".into());
     }
 
-    ctx.bot.irc_send_raw(args[0], args[1])
+    ctx.bot().irc_send_raw(args[0], args[1])
 }
 
 pub fn join(ctx: &Context, args: &str) -> Result<()> {
@@ -38,13 +38,13 @@ pub fn join(ctx: &Context, args: &str) -> Result<()> {
     }
 
     {
-        let db = ctx.bot.sql().lock();
+        let db = ctx.bot().sql().lock();
         db.execute(
-            "INSERT INTO irc_channels (channel, config_id) VALUES ($1, $2) ON CONFLICT (channel, config_id) DO NOTHING",
-            &[&args[1], &ctx.config],
+            "INSERT INTO irc_channels (config_id, channel) VALUES ($1, $2) ON CONFLICT (config_id, channel) DO NOTHING",
+            &[&args[0], &args[1]],
         )?;
     }
-    ctx.bot.irc_send_raw(args[0], &format!("JOIN {}", args[1]))?;
+    ctx.bot().irc_send_raw(args[0], &format!("JOIN {}", args[1]))?;
     ctx.say("done")
 }
 
@@ -54,12 +54,12 @@ pub fn part(ctx: &Context, args: &str) -> Result<()> {
         return Err("usage: raw <config_id> <channel>".into());
     }
     {
-        let db = ctx.bot.sql().lock();
+        let db = ctx.bot().sql().lock();
         db.execute(
             "DELETE FROM irc_channels WHERE channel = $1 AND config_id = $2",
-            &[&args[0], &ctx.config],
+            &[&args[0], &args[1]],
         )?;
     }
-    ctx.bot.irc_send_raw(args[0], &format!("part {}", args[1]))?;
+    ctx.bot().irc_send_raw(args[0], &format!("part {}", args[1]))?;
     ctx.say("done")
 }

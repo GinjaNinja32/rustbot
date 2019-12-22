@@ -13,6 +13,7 @@ extern crate rental;
 
 mod bot;
 mod config;
+mod context;
 mod db;
 
 fn main() {

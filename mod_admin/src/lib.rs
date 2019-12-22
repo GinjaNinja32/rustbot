@@ -25,24 +25,9 @@ pub fn get_meta(meta: &mut dyn Meta) {
 }
 
 fn whoami(ctx: &Context, _: &str) -> Result<()> {
-    match ctx.source {
-        IRC { ref prefix, .. } => {
-            if let Some(p) = prefix {
-                ctx.reply(Message::Simple(format!(
-                    "You are {}:{}\nFlags: {}",
-                    ctx.config,
-                    p,
-                    ctx.perms()?
-                )))?;
-            }
-        }
-        Discord { guild, ref user, .. } => ctx.reply(Message::Simple(format!(
-            "You are {}:{:?}:{}\nFlags: {}",
-            ctx.config,
-            guild.map(|g| *g.as_u64()),
-            user.id.as_u64(),
-            ctx.perms()?
-        )))?,
-    }
-    Ok(())
+    ctx.reply(Message::Simple(format!(
+        "You are {}\nFlags: {}",
+        ctx.source_str(),
+        ctx.perms()?
+    )))
 }
