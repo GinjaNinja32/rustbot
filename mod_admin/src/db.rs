@@ -9,7 +9,7 @@ pub fn query(ctx: &Context, args: &str) -> Result<()> {
             if stmt.columns().len() == 0 {
                 db.execute(args, &[]).map(|n| format!("{} row(s) changed", n))
             } else {
-                let cols: Vec<String> = stmt.columns().iter().map(|s| s.name().to_string()).collect();
+                let cols: Vec<String> = stmt.columns().iter().map(|s| format!("{} {}", s.name(), s.type_().name())).collect();
                 let colstr = format!("({})", cols.join(", "));
                 let row_strs: Vec<String> = stmt
                     .query(&[])?
@@ -21,17 +21,17 @@ pub fn query(ctx: &Context, args: &str) -> Result<()> {
                                 if row.get_bytes(i).is_none() {
                                     format!("null")
                                 } else if i8::accepts(ty) {
-                                    format!("{}i8", row.get::<_, i8>(i))
+                                    format!("{}", row.get::<_, i8>(i))
                                 } else if i16::accepts(ty) {
-                                    format!("{}i16", row.get::<_, i16>(i))
+                                    format!("{}", row.get::<_, i16>(i))
                                 } else if i32::accepts(ty) {
-                                    format!("{}i32", row.get::<_, i32>(i))
+                                    format!("{}", row.get::<_, i32>(i))
                                 } else if i64::accepts(ty) {
-                                    format!("{}i64", row.get::<_, i64>(i))
+                                    format!("{}", row.get::<_, i64>(i))
                                 } else if f32::accepts(ty) {
-                                    format!("{}f32", row.get::<_, f32>(i))
+                                    format!("{}", row.get::<_, f32>(i))
                                 } else if f64::accepts(ty) {
-                                    format!("{}f64", row.get::<_, f64>(i))
+                                    format!("{}", row.get::<_, f64>(i))
                                 } else if String::accepts(ty) {
                                     format!("{:?}", row.get::<_, String>(i))
                                 } else if bool::accepts(ty) {

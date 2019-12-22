@@ -1,7 +1,7 @@
 use rustbot::prelude::*;
 
 pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
-    let mut args: Vec<&str> = args.splitn(3, " ").collect();
+    let mut args: Vec<&str> = args.splitn(4, " ").collect();
     if args.len() != 4 {
         return Err(Error::new("usage: dmsg <config_id> <guild> <channel> <message...>"));
     }

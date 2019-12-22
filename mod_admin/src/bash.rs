@@ -16,10 +16,23 @@ fn do_bash(ctx: &Context, args: &str, oneline: bool) -> Result<()> {
 
     let result = Command::new("bash").arg("-c").arg(args).output()?;
 
-    let mut text = std::str::from_utf8(&result.stdout)?.trim_end().to_string();
+    let mut out = std::str::from_utf8(&result.stdout)?.trim_end().to_string();
     if oneline {
-        text = text.replace("\r", "").replace("\n", "\x0314; \x03\x02\x02");
+        out = out.replace("\r", "").replace("\n", "\x0314; \x03\x02\x02");
     }
 
-    ctx.say(&text)
+    if !out.is_empty() {
+        ctx.say(&out)?;
+    }
+
+    let mut err = std::str::from_utf8(&result.stderr)?.trim_end().to_string();
+    if oneline {
+        err = err.replace("\r", "").replace("\n", "\x0314; \x03\x02\x02");
+    }
+
+    if !err.is_empty() {
+        ctx.say(&format!("stderr: {}", err))?;
+    }
+
+    Ok(())
 }

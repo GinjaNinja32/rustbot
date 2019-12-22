@@ -66,6 +66,9 @@ impl Module {
         };
 
         let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
+        let sunrise = NaiveDateTime::from_timestamp(data.sys.sunrise + data.timezone, 0).format("%H:%M");
+        let sunset = NaiveDateTime::from_timestamp(data.sys.sunset + data.timezone, 0).format("%H:%M");
+
         let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
         let temp = format!(
             "{:.0} C ({:.0} F)",
@@ -87,14 +90,16 @@ impl Module {
         );
         let pressure = format!("{:.0} mb", data.main.pressure);
         ctx.say(&format!(
-            "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}",
+            "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}; Sunrise: {}; Sunset: {}",
             location,
             timestamp,
             weathers.join(", "),
             temp,
             data.main.humidity,
             wind,
-            pressure
+            pressure,
+            sunrise,
+            sunset,
         ))
     }
 }
@@ -176,6 +181,7 @@ struct Response {
     main: Main,
     name: String,
     sys: Sys,
+    timezone: i64,
     visibility: Option<i64>,
     weather: Vec<Weather>,
     wind: Wind,

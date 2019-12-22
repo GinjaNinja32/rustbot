@@ -72,7 +72,7 @@ impl Command {
     }
     pub fn call(&self, ctx: &Context, args: &str) -> Result<()> {
         if !ctx.perms()?.contains(self.req_perms) {
-            return ctx.say("permission denied");
+            return Ok(());
         }
 
         (self.function)(ctx, args)
@@ -161,7 +161,7 @@ impl Message {
                 (lines, Some(extra)) => Ok(format!("{}\n{}", lines.join("\n"), extra)),
             },
             Code(s) => {
-                if s.contains('\n') {
+                if !s.contains('\n') {
                     Ok(format!("`{}`", s))
                 } else {
                     match paste_max_lines(s, 11)? {
