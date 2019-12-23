@@ -4,31 +4,33 @@ use std::collections::BTreeMap;
 const AIRPORTS_CSV: &'static str = include_str!("../../data/airports.csv");
 
 fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
-    let mut reader = csv::Reader::from_reader(data.as_bytes());
-
     let mut result: BTreeMap<String, Coords> = BTreeMap::new();
 
-    for record in reader.records() {
-        let record = record?;
+    for line in data.split("\n") {
+        if line == "" {
+            continue;
+        }
 
-        if record.len() != 14 {
+        let parts: Vec<&str> = line.split(",").collect();
+
+        if parts.len() != 4 {
             return Err(format!(
-                "got a wrong-size csv record? expected len=14, got len={} with {:?}",
-                record.len(),
-                record,
+                "got a wrong-size csv record? expected len=4, got len={} with {:?}",
+                parts.len(),
+                line,
             )
             .into());
         }
 
-        let iata = &record[4]; // 3 letters
-        let icao = &record[5]; // 4 letters
+        let iata = &parts[0]; // 3 letters
+        let icao = &parts[1]; // 4 letters
 
         let coords = Coords {
-            lat: record[6].to_string(),
-            lon: record[7].to_string(),
+            lat: parts[2].to_string(),
+            lon: parts[3].to_string(),
         };
 
-        if iata != "\\N" {
+        if *iata != "\\N" {
             result.insert(iata.to_string(), coords.clone());
         }
         result.insert(icao.to_string(), coords);

@@ -45,4 +45,6 @@ data: mkdir_data data/airports.csv
 
 data/airports.csv:
 	curl -s https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat \
+		| awk 'FS=",", OFS="," { print $$5, $$6, $$7, $$8 }' \
+		| tr -d '"' \
 		> $@
