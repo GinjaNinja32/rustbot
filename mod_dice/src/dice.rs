@@ -31,7 +31,7 @@ pub fn parse(input: &str) -> Result<Expression, String> {
         .map_err(|e| format!("{:?}", e))
 }
 
-pub fn eval(expr: Expression) -> Result<String, String> {
+pub fn eval(expr: &Expression) -> Result<String, String> {
     let (s, v) = expr.eval()?;
 
     Ok(format!("{}: {}", v.to_string(), s))

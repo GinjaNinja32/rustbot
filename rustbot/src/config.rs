@@ -6,16 +6,16 @@ use rustbot::prelude::*;
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub postgres: PostgresConfig,
+    pub postgres: Postgres,
 
-    pub irc: Vec<IRCConfig>,
-    pub discord: Vec<DiscordConfig>,
+    pub irc: Vec<IRC>,
+    pub discord: Vec<Discord>,
 
     pub module: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Deserialize)]
-pub struct PostgresConfig {
+pub struct Postgres {
     pub database: String,
     pub user: String,
     pub password: String,
@@ -25,7 +25,7 @@ pub struct PostgresConfig {
 }
 
 #[derive(Deserialize)]
-pub struct IRCConfig {
+pub struct IRC {
     pub id: String,
 
     pub nick: String,
@@ -39,7 +39,7 @@ pub struct IRCConfig {
 }
 
 #[derive(Deserialize)]
-pub struct DiscordConfig {
+pub struct Discord {
     pub id: String,
 
     pub token: String,

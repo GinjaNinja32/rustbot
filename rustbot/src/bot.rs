@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use config;
 use context;
-use context::Prefix::*;
+use context::Prefix;
 use db;
 use rustbot::prelude::*;
 use rustbot::types;
@@ -32,35 +32,35 @@ pub struct Rustbot {
     commands: RwLock<BTreeMap<String, (String, Command)>>,
 }
 
-impl Rustbot {
-    fn irc_parse_prefix(&self, prefix: Option<String>) -> Option<context::Prefix> {
-        match prefix {
-            None => None,
-            Some(s) => {
-                if !s.contains('!') {
-                    Some(Server(s))
+fn irc_parse_prefix(prefix: Option<String>) -> Option<context::Prefix> {
+    match prefix {
+        None => None,
+        Some(s) => {
+            if !s.contains('!') {
+                Some(Prefix::Server(s))
+            } else {
+                let ss = s.clone();
+                let nr: Vec<&str> = ss.splitn(2, '!').collect();
+                if !nr[1].contains('@') {
+                    Some(Prefix::Server(s))
                 } else {
-                    let ss = s.clone();
-                    let nr: Vec<&str> = ss.splitn(2, '!').collect();
-                    if !nr[1].contains('@') {
-                        Some(Server(s))
-                    } else {
-                        let uh: Vec<&str> = nr[1].splitn(2, '@').collect();
-                        Some(User {
-                            nick: nr[0].to_string(),
-                            user: uh[0].to_string(),
-                            host: uh[1].to_string(),
-                        })
-                    }
+                    let uh: Vec<&str> = nr[1].splitn(2, '@').collect();
+                    Some(Prefix::User {
+                        nick: nr[0].to_string(),
+                        user: uh[0].to_string(),
+                        host: uh[1].to_string(),
+                    })
                 }
             }
         }
     }
+}
 
+impl Rustbot {
     fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
         if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
             let source = context::IRC {
-                prefix: self.irc_parse_prefix(irc_msg.prefix),
+                prefix: irc_parse_prefix(irc_msg.prefix),
                 channel: Some(channel),
             };
             let ctx = &context::Context {
@@ -69,7 +69,7 @@ impl Rustbot {
                 source,
                 bot_name: bot_name.to_string(),
             };
-            Rustbot::handle(self, ctx, message.as_str());
+            self.handle(ctx, message.as_str());
         }
     }
 
@@ -88,7 +88,7 @@ impl Rustbot {
             bot_name: "".to_string(),
         };
 
-        Rustbot::handle(self, ctx, msg.content.as_str());
+        self.handle(ctx, msg.content.as_str());
     }
 
     fn handle(&self, ctx: &context::Context, message: &str) {
@@ -160,7 +160,7 @@ impl Rustbot {
         let mut args = args.to_string();
         for transform in transforms.iter() {
             match transform {
-                RegexReplace { find, replace, global } => {
+                ArgumentTransform::RegexReplace { find, replace, global } => {
                     let re = Regex::new(find)?;
                     args = re
                         .replacen(
@@ -170,7 +170,7 @@ impl Rustbot {
                         )
                         .into_owned();
                 }
-                ByIndex(t) => {
+                ArgumentTransform::ByIndex(t) => {
                     let new_args = {
                         let indexed: Vec<_> = args.split(' ').collect();
                         let mut new_args = Vec::with_capacity(usize::max(5, 2 * indexed.len()));
@@ -194,8 +194,6 @@ impl Rustbot {
         Ok((newcmd, args))
     }
 }
-
-use self::ArgumentTransform::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -225,7 +223,7 @@ where
         0 => Ok(Some(false)),
         1 => Ok(Some(true)),
         other => Err(serde::de::Error::invalid_value(
-            serde::de::Unexpected::Unsigned(other as u64),
+            serde::de::Unexpected::Unsigned(other.into()),
             &"zero or one",
         )),
     }
@@ -268,7 +266,7 @@ impl types::Bot for Rustbot {
                 )?;
             m.rent_mut::<_, Result<()>>(|meta| {
                 let mut commands = self.commands.write();
-                for command in meta.commands.iter() {
+                for command in &meta.commands {
                     commands.remove(command.0);
                 }
                 if let Some(f) = &mut meta.deinit {
@@ -298,7 +296,7 @@ impl types::Bot for Rustbot {
         let mut m = load_module(name, lib)?;
         let mut commands = self.commands.write();
         m.rent_mut::<_, Result<()>>(|meta| {
-            for command in meta.commands.iter() {
+            for command in &meta.commands {
                 commands.insert(command.0.to_string(), (name.to_string(), (*command.1).clone()));
             }
             Ok(())
@@ -533,7 +531,7 @@ fn run_with_backoff(desc: &str, f: &dyn Fn() -> Result<()>) {
     }
 }
 
-fn irc_descriptor(c: &config::IRCConfig) -> String {
+fn irc_descriptor(c: &config::IRC) -> String {
     format!("{} ({}:{})", c.id, c.server, c.port,)
 }
 
