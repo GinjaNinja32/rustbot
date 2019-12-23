@@ -13,7 +13,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("delrand", Command::new(delrand).req_perms(Perms::Admin));
 }
 
-fn delrand(ctx: &Context, args: &str) -> Result<()> {
+fn delrand(ctx: &dyn Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() != 2 {
         return ctx.say("usage: delrand <category> <string>");
@@ -26,11 +26,11 @@ fn delrand(ctx: &Context, args: &str) -> Result<()> {
     if n != 1 {
         ctx.say(&format!("{} rows removed", n))
     } else {
-        ctx.say(&format!("done"))
+        ctx.say("done")
     }
 }
 
-fn randomlist(what: &str, ctx: &Context, args: &str) -> Result<()> {
+fn randomlist(what: &str, ctx: &dyn Context, args: &str) -> Result<()> {
     let parts: Vec<&str> = args.splitn(2, ' ').collect();
     if parts.len() == 2 && parts[0] == "add" {
         let n = ctx.bot().sql().lock().execute(

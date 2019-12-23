@@ -66,7 +66,7 @@ impl Rustbot {
             let ctx = &context::Context {
                 bot: self,
                 config: cfg,
-                source: source,
+                source,
                 bot_name: bot_name.to_string(),
             };
             Rustbot::handle(self, ctx, message.as_str());
@@ -95,9 +95,9 @@ impl Rustbot {
         match self.handle_inner(ctx, message) {
             Ok(()) => (),
             Err(err) => {
-                ctx.say(&format!("command failed: {}", err))
-                    .err()
-                    .map(|e| println!("failed to handle error: {}", e));
+                if let Err(e) = ctx.say(&format!("command failed: {}", err)) {
+                    println!("failed to handle error: {}", e);
+                }
             }
         }
     }
@@ -191,7 +191,7 @@ impl Rustbot {
             }
         }
 
-        Ok((newcmd, args.to_string()))
+        Ok((newcmd, args))
     }
 }
 
@@ -248,7 +248,7 @@ impl FromSql for ArgumentTransforms {
         raw: &[u8],
     ) -> std::result::Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
         let v = serde_json::Value::from_sql(ty, raw)?;
-        return Ok(serde_json::from_value(v)?);
+        Ok(serde_json::from_value(v)?)
     }
 
     fn accepts(ty: &postgres::types::Type) -> bool {
@@ -342,7 +342,7 @@ impl types::Bot for Rustbot {
                 cache.guilds.get(&GuildId(id))
             } else {
                 let mut v = None;
-                for (_, g) in &cache.guilds {
+                for g in cache.guilds.values() {
                     if g.read().name == guild {
                         v = Some(g);
                         break;
@@ -399,7 +399,7 @@ impl types::Bot for Rustbot {
                     return l.0.len().cmp(&r.0.len()).reverse();
                 }
 
-                return l.0.cmp(&r.0);
+                l.0.cmp(&r.0)
             });
 
             for (find, replace) in replacements {
@@ -429,12 +429,10 @@ pub fn start() -> Result<()> {
     {
         let modules: Vec<String> = {
             let db = b.db.lock();
-            let m = db
-                .query("SELECT name FROM modules WHERE enabled = true", &[])?
+            db.query("SELECT name FROM modules WHERE enabled = true", &[])?
                 .iter()
                 .map(|row| row.get(0))
-                .collect();
-            m
+                .collect()
         };
         for m in modules {
             b.load_module(m.as_str()).unwrap();
@@ -556,6 +554,7 @@ impl dis::EventHandler for DiscordBot {
 
 use bot::rent_module::Module;
 rental! {
+    #[allow(clippy::useless_transmute)]
     mod rent_module {
         use crate::bot;
 

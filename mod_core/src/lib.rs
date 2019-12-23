@@ -20,7 +20,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     );
 }
 
-fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Result<()> {
+fn exec(ctx: &dyn Context, args: &str, what: fn(&dyn Context, &str) -> Result<()>) -> Result<()> {
     for m in args.split(' ') {
         if m == "core" {
             ctx.say("skipping core")?;
@@ -34,22 +34,22 @@ fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Re
     ctx.say("done")
 }
 
-fn drop(ctx: &Context, args: &str) -> Result<()> {
+fn drop(ctx: &dyn Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| ctx.bot().drop_module(m))
 }
 
-fn load(ctx: &Context, args: &str) -> Result<()> {
+fn load(ctx: &dyn Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| ctx.bot().load_module(m))
 }
 
-fn reload(ctx: &Context, args: &str) -> Result<()> {
+fn reload(ctx: &dyn Context, args: &str) -> Result<()> {
     exec(ctx, args, |ctx, m| {
         ctx.bot().drop_module(m)?;
         ctx.bot().load_module(m)
     })
 }
 
-fn recompile(ctx: &Context, args: &str) -> Result<()> {
+fn recompile(ctx: &dyn Context, args: &str) -> Result<()> {
     let mut cmd = ProcessCommand::new("cargo");
     cmd.arg("build");
     if !cfg!(debug_assertions) {
@@ -79,7 +79,7 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
     }
 }
 
-fn set_enabled(ctx: &Context, args: &str, target: bool) -> Result<()> {
+fn set_enabled(ctx: &dyn Context, args: &str, target: bool) -> Result<()> {
     let a = args.split(' ').collect::<Vec<&str>>();
     if a.len() < 2 {
         return Err("Usage: (enable/disable) config_id module [module [...]]".into());

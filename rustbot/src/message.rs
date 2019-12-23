@@ -2,7 +2,7 @@ use rustbot::prelude::Message::*;
 use rustbot::prelude::*;
 
 fn paste_max_lines(input: String, max_lines: usize) -> Result<(Vec<String>, Option<String>)> {
-    let lines: Vec<String> = input.split("\n").map(|l| l.to_string()).collect();
+    let lines: Vec<String> = input.split('\n').map(|l| l.to_string()).collect();
     if lines.len() > max_lines {
         let client = reqwest::Client::new();
         let mut result = client.post("http://ix.io").form(&[("f:1", input)]).send()?;

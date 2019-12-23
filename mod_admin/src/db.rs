@@ -2,11 +2,11 @@ use rustbot::prelude::*;
 
 use postgres::types::FromSql;
 
-pub fn query(ctx: &Context, args: &str) -> Result<()> {
+pub fn query(ctx: &dyn Context, args: &str) -> Result<()> {
     let result: String = {
         let db = ctx.bot().sql().lock();
         let r = db.prepare(args).and_then(|stmt| {
-            if stmt.columns().len() == 0 {
+            if stmt.columns().is_empty() {
                 db.execute(args, &[]).map(|n| format!("{} row(s) changed", n))
             } else {
                 let cols: Vec<String> = stmt
@@ -23,7 +23,7 @@ pub fn query(ctx: &Context, args: &str) -> Result<()> {
                             .map(|i| {
                                 let ty = row.columns()[i].type_();
                                 if row.get_bytes(i).is_none() {
-                                    format!("null")
+                                    "null".to_string()
                                 } else if i8::accepts(ty) {
                                     format!("{}", row.get::<_, i8>(i))
                                 } else if i16::accepts(ty) {

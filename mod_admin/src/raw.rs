@@ -1,7 +1,7 @@
 use rustbot::prelude::*;
 
-pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
-    let mut args: Vec<&str> = args.splitn(4, " ").collect();
+pub fn dmsg(ctx: &dyn Context, args: &str) -> Result<()> {
+    let mut args: Vec<&str> = args.splitn(4, ' ').collect();
     if args.len() != 4 {
         return Err("usage: dmsg <config_id> <guild> <channel> <message...>".into());
     }
@@ -13,8 +13,8 @@ pub fn dmsg(ctx: &Context, args: &str) -> Result<()> {
     ctx.bot().dis_send_message(args[0], args[1], args[2], args[3], true)
 }
 
-pub fn imsg(ctx: &Context, args: &str) -> Result<()> {
-    let args: Vec<&str> = args.splitn(3, " ").collect();
+pub fn imsg(ctx: &dyn Context, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 3 {
         return Err("usage: imsg <config_id> <channel> <message...>".into());
     }
@@ -22,8 +22,8 @@ pub fn imsg(ctx: &Context, args: &str) -> Result<()> {
     ctx.bot().irc_send_privmsg(args[0], args[1], args[2])
 }
 
-pub fn raw(ctx: &Context, args: &str) -> Result<()> {
-    let args: Vec<&str> = args.splitn(2, " ").collect();
+pub fn raw(ctx: &dyn Context, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.splitn(2, ' ').collect();
     if args.len() != 2 {
         return Err("usage: raw <config_id> <message...>".into());
     }
@@ -31,8 +31,8 @@ pub fn raw(ctx: &Context, args: &str) -> Result<()> {
     ctx.bot().irc_send_raw(args[0], args[1])
 }
 
-pub fn join(ctx: &Context, args: &str) -> Result<()> {
-    let args: Vec<&str> = args.splitn(3, " ").collect();
+pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
         return Err("usage: raw <config_id> <channel>".into());
     }
@@ -48,8 +48,8 @@ pub fn join(ctx: &Context, args: &str) -> Result<()> {
     ctx.say("done")
 }
 
-pub fn part(ctx: &Context, args: &str) -> Result<()> {
-    let args: Vec<&str> = args.splitn(3, " ").collect();
+pub fn part(ctx: &dyn Context, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
         return Err("usage: raw <config_id> <channel>".into());
     }

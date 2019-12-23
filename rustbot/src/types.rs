@@ -9,12 +9,12 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 bitflags! {
     pub struct Perms: u64 {
-        const None     = 0x00000000;
-        const Admin    = 0x00000001;
-        const Raw      = 0x00000002;
-        const Database = 0x00000004;
-        const Eval     = 0x00000008;
-        const Modules  = 0x00000010;
+        const None     = 0x0000_0000;
+        const Admin    = 0x0000_0001;
+        const Raw      = 0x0000_0002;
+        const Database = 0x0000_0004;
+        const Eval     = 0x0000_0008;
+        const Modules  = 0x0000_0010;
     }
 }
 
@@ -55,10 +55,10 @@ impl Command {
         Self::arc(Arc::new(f))
     }
     pub fn arc(f: Arc<CommandFn>) -> Self {
-        return Self {
+        Self {
             function: f,
             req_perms: Perms::None,
-        };
+        }
     }
     pub fn req_perms(&self, p: Perms) -> Self {
         let mut s = self.clone();

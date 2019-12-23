@@ -24,7 +24,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("bashl", Command::new(bash::bashl).req_perms(Perms::Eval));
 }
 
-fn whoami(ctx: &Context, _: &str) -> Result<()> {
+fn whoami(ctx: &dyn Context, _: &str) -> Result<()> {
     ctx.reply(Message::Simple(format!(
         "You are {}\nFlags: {}",
         ctx.source_str(),

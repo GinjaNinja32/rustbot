@@ -1,15 +1,15 @@
 use rustbot::prelude::*;
 use std::process::Command;
 
-pub fn bash(ctx: &Context, args: &str) -> Result<()> {
+pub fn bash(ctx: &dyn Context, args: &str) -> Result<()> {
     do_bash(ctx, args, true)
 }
 
-pub fn bashl(ctx: &Context, args: &str) -> Result<()> {
+pub fn bashl(ctx: &dyn Context, args: &str) -> Result<()> {
     do_bash(ctx, args, false)
 }
 
-fn do_bash(ctx: &Context, args: &str, oneline: bool) -> Result<()> {
+fn do_bash(ctx: &dyn Context, args: &str, oneline: bool) -> Result<()> {
     if cfg!(target_os = "windows") {
         return Err("unsupported".into());
     }

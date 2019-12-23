@@ -62,11 +62,12 @@ impl Display for EvaluatedValue {
         }
     }
 }
+
 impl EvaluatedValue {
     fn as_i64(&self) -> Result<i64, String> {
         match self {
             Integer(i) => Ok(*i),
-            IntSlice(s) => Ok(s.iter().fold(0, |x, y| x + y)),
+            IntSlice(s) => Ok(s.iter().sum()),
             Bool(true) => Ok(1),
             Bool(false) => Ok(0),
             BoolSlice(s) => Ok(s.iter().filter(|&v| *v).count() as i64),
@@ -78,20 +79,6 @@ impl EvaluatedValue {
             IntSlice(s) => Ok(s.to_vec()),
             Bool(b) => Err(format!("cannot convert {} to slice", b)),
             BoolSlice(s) => Ok(s.iter().map(|&v| if v { 1 } else { 0 }).collect()),
-        }
-    }
-    fn to_string(&self) -> String {
-        match self {
-            Integer(i) => format!("{}", i),
-            IntSlice(s) => {
-                let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
-                format!("[{}]", v.join(", "))
-            }
-            Bool(b) => format!("{}", b),
-            BoolSlice(s) => {
-                let v: Vec<String> = s.iter().map(|e| format!("{}", e)).collect();
-                format!("[{}]", v.join(", "))
-            }
         }
     }
 }
@@ -187,7 +174,7 @@ pub struct AddSub {
 impl Evaluable for AddSub {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         let (s, mut l) = self.left.eval()?;
-        let mut ss = s.to_string();
+        let mut ss = s;
         for elem in &self.right {
             let (rs, r) = elem.1.eval()?;
 
@@ -211,7 +198,7 @@ pub struct MulDiv {
 impl Evaluable for MulDiv {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         let (s, mut l) = self.left.eval()?;
-        let mut ss = s.to_string();
+        let mut ss = s;
         for elem in &self.right {
             let (rs, r) = elem.1.eval()?;
 
@@ -256,7 +243,7 @@ pub struct DiceMod {
 impl Evaluable for DiceMod {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         match &self.op {
-            None => return self.roll.eval(),
+            None => self.roll.eval(),
             Some((op, r)) => match self.roll {
                 DiceRoll::NoRoll(_) => {
                     let l = self.roll.eval()?;
@@ -288,11 +275,11 @@ pub enum Explode {
     Default,
     Target(i64),
 }
-impl Explode {
-    fn to_string(&self) -> String {
+impl Display for Explode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match self {
-            Explode::Default => return "!".to_string(),
-            Explode::Target(t) => return format!("!{}", t),
+            Explode::Default => write!(f, "!"),
+            Explode::Target(t) => write!(f, "!{}", t),
         }
     }
 }
@@ -320,8 +307,8 @@ impl Evaluable for DiceRoll {
     fn eval(&self) -> Result<(String, EvaluatedValue), String> {
         let (s, r) = self._eval()?;
         match self {
-            DiceRoll::NoRoll(_) => return Ok((s, r)),
-            DiceRoll::Roll { .. } => return Ok((format!("{}:{:?}", s, r.as_int_slice()?), r)),
+            DiceRoll::NoRoll(_) => Ok((s, r)),
+            DiceRoll::Roll { .. } => Ok((format!("{}:{:?}", s, r.as_int_slice()?), r)),
         }
     }
 }
@@ -333,7 +320,7 @@ impl DiceRoll {
             DiceRoll::Roll {
                 count: cv,
                 sides: sv,
-                explode: e,
+                explode: ex,
             } => {
                 let (cs, c) = match cv {
                     Some(v) => {
@@ -370,15 +357,15 @@ impl DiceRoll {
                 }
 
                 let mut n = c as usize;
-                let target = match e {
+                let target = match ex {
                     None => None,
                     Some(Explode::Default) => Some(*s.iter().max().unwrap()),
                     Some(Explode::Target(t)) => Some(*t),
                 };
 
-                if target.is_some() {
+                if let Some(target) = target {
                     let min_roll = *s.iter().min().unwrap();
-                    if min_roll >= target.unwrap() {
+                    if min_roll >= target {
                         return Err("tried to roll an always-exploding die".to_string());
                     }
                 }
@@ -386,7 +373,7 @@ impl DiceRoll {
                 let mut rng = thread_rng();
                 let results = iter::repeat_with(|| *s.choose(&mut rng).unwrap())
                     .take_while(|&roll| {
-                        if n <= 0 {
+                        if n == 0 {
                             return false;
                         }
                         match target {
@@ -397,11 +384,11 @@ impl DiceRoll {
                                 }
                             }
                         };
-                        return true;
+                        true
                     })
                     .collect();
 
-                let exp_str = match e {
+                let exp_str = match ex {
                     None => "".to_string(),
                     Some(exp) => exp.to_string(),
                 };

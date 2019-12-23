@@ -34,5 +34,5 @@ fn migrate(pc: &PostgresConfig) -> Result<String> {
     let config = config.reload()?;
     migrant_lib::list(&config)?;
 
-    return Ok(config.connect_string()?);
+    Ok(config.connect_string()?)
 }

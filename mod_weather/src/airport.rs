@@ -1,17 +1,17 @@
 use rustbot::prelude::*;
 use std::collections::BTreeMap;
 
-const AIRPORTS_CSV: &'static str = include_str!("../../data/airports.csv");
+const AIRPORTS_CSV: &str = include_str!("../../data/airports.csv");
 
 fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
     let mut result: BTreeMap<String, Coords> = BTreeMap::new();
 
-    for line in data.split("\n") {
+    for line in data.split('\n') {
         if line == "" {
             continue;
         }
 
-        let parts: Vec<&str> = line.split(",").collect();
+        let parts: Vec<&str> = line.split(',').collect();
 
         if parts.len() != 4 {
             return Err(format!(
@@ -22,15 +22,15 @@ fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
             .into());
         }
 
-        let iata = &parts[0]; // 3 letters
-        let icao = &parts[1]; // 4 letters
+        let iata = parts[0]; // 3 letters
+        let icao = parts[1]; // 4 letters
 
         let coords = Coords {
             lat: parts[2].to_string(),
             lon: parts[3].to_string(),
         };
 
-        if *iata != "\\N" {
+        if iata != "\\N" {
             result.insert(iata.to_string(), coords.clone());
         }
         result.insert(icao.to_string(), coords);

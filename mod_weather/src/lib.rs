@@ -27,7 +27,7 @@ pub fn get_meta_conf(meta: &mut dyn Meta, config: toml::Value) -> Result<()> {
 }
 
 impl Module {
-    fn weather(&self, ctx: &Context, args: &str) -> Result<()> {
+    fn weather(&self, ctx: &dyn Context, args: &str) -> Result<()> {
         let params = if let Some(coords) = airport::locate(args) {
             vec![("lat", coords.lat), ("lon", coords.lon), ("APPID", self.appid.clone())]
         } else {

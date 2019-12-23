@@ -21,21 +21,19 @@ pub fn get_meta(meta: &mut dyn Meta) {
     );
 }
 
-fn dm(ctx: &Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
+fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()> {
     // Security check
-    if !secure {
-        if args.contains("##") || args.contains("include") {
-            ctx.say("You attempted to use either ## or include; both are blocked for security reasons.")?;
-            if ctx.perms()?.contains(Perms::Eval) {
-                ctx.say("Use !dms or !dmsl to bypass this warning")?;
-            }
-            return Ok(());
+    if !secure && (args.contains("##") || args.contains("include")) {
+        ctx.say("You attempted to use either ## or include; both are blocked for security reasons.")?;
+        if ctx.perms()?.contains(Perms::Eval) {
+            ctx.say("Use !dms or !dmsl to bypass this warning")?;
         }
+        return Ok(());
     }
 
-    let args = args.clone().trim().trim_matches('`');
+    let args = args.trim().trim_matches('`');
 
-    let code: String = if args.contains("\n") {
+    let code: String = if args.contains('\n') {
         if args.contains("\nMAIN\n") || args.contains("\nproc/main()\n") || args.contains("\n/proc/main()\n") {
             format!(
                 r#"
