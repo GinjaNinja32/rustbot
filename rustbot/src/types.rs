@@ -106,12 +106,43 @@ pub enum Color {
     Green,
 }
 
+impl std::ops::Add<Format> for Color {
+    type Output = FormatColor;
+
+    fn add(self, rhs: Format) -> FormatColor {
+        FormatColor(rhs, self)
+    }
+}
+
 bitflags! {
     pub struct Format: u8 {
         const None = 0x00;
         const Bold = 0x01;
         const Italic = 0x02;
         const Underline = 0x04;
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct FormatColor(pub Format, pub Color);
+
+impl std::ops::Add<Format> for FormatColor {
+    type Output = FormatColor;
+
+    fn add(self, rhs: Format) -> FormatColor {
+        FormatColor(self.0 | rhs, self.1)
+    }
+}
+
+impl From<Format> for FormatColor {
+    fn from(f: Format) -> Self {
+        Self(f, Color::None)
+    }
+}
+
+impl From<Color> for FormatColor {
+    fn from(c: Color) -> Self {
+        Self(Format::None, c)
     }
 }
 
@@ -122,40 +153,53 @@ pub enum Message<'a> {
 }
 
 #[derive(Clone)]
-pub enum Span<'a> {
-    Simple(Cow<'a, str>),
-    Colored(Color, Cow<'a, str>),
-    Formatted(Format, Cow<'a, str>),
-    Text(Color, Format, Cow<'a, str>),
+pub struct Span<'a> {
+    pub text: Cow<'a, str>,
+    pub format: Format,
+    pub color: Color,
 }
 
 impl<'a> From<String> for Span<'a> {
     fn from(s: String) -> Self {
-        Span::Simple(s.into())
+        span!(s)
     }
 }
 
 impl<'a> From<&'a str> for Span<'a> {
     fn from(s: &'a str) -> Self {
-        Span::Simple(s.into())
+        span!(s)
     }
 }
 
 impl<'a> From<Cow<'a, str>> for Span<'a> {
     fn from(s: Cow<'a, str>) -> Self {
-        Span::Simple(s)
+        span!(s)
     }
 }
 
-impl Span<'_> {
-    pub fn decompose(&self) -> (Color, Format, &str) {
-        match self {
-            Span::Simple(s) => (Color::None, Format::None, s),
-            Span::Colored(c, s) => (*c, Format::None, s),
-            Span::Formatted(f, s) => (Color::None, *f, s),
-            Span::Text(c, f, s) => (*c, *f, s),
+use span;
+
+#[macro_export]
+macro_rules! span {
+    ($fc:expr; $fmt:tt, $($arg:tt)*) => {{
+        let fc: $crate::types::FormatColor = $fc.into();
+        Span{
+            text: format!($fmt, $($arg)*).into(),
+            format: fc.0,
+            color: fc.1,
         }
-    }
+    }};
+    ($fc:expr; $text:expr) => {{
+        let fc: $crate::types::FormatColor = $fc.into();
+        Span {
+            text: $text.into(),
+            format: fc.0,
+            color: fc.1,
+        }
+    }};
+    ($text: expr) => {{
+        $crate::span!(Format::None; $text)
+    }};
 }
 
 #[macro_export]

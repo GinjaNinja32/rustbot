@@ -1,7 +1,7 @@
 extern crate rustbot;
 
 use rustbot::prelude::*;
-use rustbot::spans;
+use rustbot::{span, spans};
 
 #[no_mangle]
 pub fn get_meta(meta: &mut dyn Meta) {
@@ -12,19 +12,19 @@ pub fn get_meta(meta: &mut dyn Meta) {
             ctx.say(&format!("you passed: {}", args))?;
             ctx.reply(Message::Spans(spans!(
                 "simple ",
-                Span::Formatted(Format::Bold, "bold".into()),
+                span!(Format::Bold; "bold"),
                 " ",
-                Span::Formatted(Format::Italic, "italic".into()),
+                span!(Format::Italic; "italic"),
                 " ",
-                Span::Formatted(Format::Underline, "underline".into()),
+                span!(Format::Underline; "underline"),
                 " ",
-                Span::Colored(Color::Red, "red".into()),
+                span!(Color::Red; "red"),
                 " ",
-                Span::Colored(Color::Yellow, "yellow".into()),
+                span!(Color::Yellow; "yellow"),
                 " ",
-                Span::Colored(Color::Green, "green".into()),
+                span!(Color::Green; "green"),
                 " ",
-                Span::Text(Color::Red, Format::Bold | Format::Italic, "bold_italic_red".into()),
+                span!(Color::Red + Format::Bold + Format::Italic; "bold_italic_red"),
             )))
         }),
     );

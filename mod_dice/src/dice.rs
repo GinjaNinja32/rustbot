@@ -6,7 +6,7 @@ use std::fmt::Display;
 use std::iter;
 
 use rustbot::prelude::{span_join, Color, Format, Span};
-use rustbot::spans;
+use rustbot::{span, spans};
 
 // enums
 use self::EvaluatedValue::*;
@@ -539,9 +539,9 @@ impl CompareOp {
                     .iter()
                     .map(|r| {
                         if self.compare(l, *r) {
-                            (Span::Colored(Color::Green, format!("{}", *r).into()), true)
+                            (span!(Color::Green; "{}", *r), true)
                         } else {
-                            (Span::Colored(Color::Red, format!("{}", *r).into()), false)
+                            (span!(Color::Red; "{}", *r), false)
                         }
                     })
                     .unzip();
@@ -580,8 +580,8 @@ pub enum ModOp {
 
 fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'static>> {
     let vec = Iterator::chain(
-        aa.iter().map(|v| Span::Text(ac, Format::Bold, format!("{}", v).into())),
-        ba.iter().map(|v| Span::Text(bc, Format::Bold, format!("{}", v).into())),
+        aa.iter().map(|v| span!(ac + Format::Bold; "{}", v)),
+        ba.iter().map(|v| span!(bc + Format::Bold; "{}", v)),
     )
     .collect::<Vec<_>>();
     spans!("[", span_join(vec, ", "), "]")
