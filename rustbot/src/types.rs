@@ -123,6 +123,14 @@ bitflags! {
     }
 }
 
+impl std::ops::Add<Format> for Format {
+    type Output = Format;
+
+    fn add(self, rhs: Format) -> Format {
+        self | rhs
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct FormatColor(pub Format, pub Color);
 
@@ -181,14 +189,6 @@ use span;
 
 #[macro_export]
 macro_rules! span {
-    ($fc:expr; $fmt:tt, $($arg:tt)*) => {{
-        let fc: $crate::types::FormatColor = $fc.into();
-        Span{
-            text: format!($fmt, $($arg)*).into(),
-            format: fc.0,
-            color: fc.1,
-        }
-    }};
     ($fc:expr; $text:expr) => {{
         let fc: $crate::types::FormatColor = $fc.into();
         Span {
@@ -197,9 +197,16 @@ macro_rules! span {
             color: fc.1,
         }
     }};
-    ($text: expr) => {{
-        $crate::span!(Format::None; $text)
+    ($fc:expr; $fmt:literal, $($arg:tt)*) => {{
+        let fc: $crate::types::FormatColor = $fc.into();
+        Span{
+            text: format!($fmt, $($arg)*).into(),
+            format: fc.0,
+            color: fc.1,
+        }
     }};
+    ($text: expr) => { $crate::span!(Format::None; $text) };
+    ($fmt:literal, $($arg:tt)*) => { $crate::span!(Format::None, $fmt, $($arg)*) };
 }
 
 #[macro_export]
