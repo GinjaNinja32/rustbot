@@ -191,7 +191,7 @@ use span;
 macro_rules! span {
     ($fc:expr; $text:expr) => {{
         let fc: $crate::types::FormatColor = $fc.into();
-        Span {
+        $crate::types::Span {
             text: $text.into(),
             format: fc.0,
             color: fc.1,
@@ -199,20 +199,20 @@ macro_rules! span {
     }};
     ($fc:expr; $fmt:literal, $($arg:tt)*) => {{
         let fc: $crate::types::FormatColor = $fc.into();
-        Span{
+        $crate::types::Span{
             text: format!($fmt, $($arg)*).into(),
             format: fc.0,
             color: fc.1,
         }
     }};
-    ($text: expr) => { $crate::span!(Format::None; $text) };
-    ($fmt:literal, $($arg:tt)*) => { $crate::span!(Format::None, $fmt, $($arg)*) };
+    ($text: expr) => { $crate::span!($crate::types::Format::None; $text) };
+    ($fmt:literal, $($arg:tt)*) => { $crate::span!($crate::types::Format::None, $fmt, $($arg)*) };
 }
 
 #[macro_export]
 macro_rules! spans {
     ($($x:expr),*) => {{
-        let mut v: Vec<Span> = vec![];
+        let mut v: Vec<$crate::types::Span> = vec![];
         $(
             $crate::types::MoveToVecSpan::move_to_vec_span($x, &mut v);
         )*
