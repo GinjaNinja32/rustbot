@@ -34,7 +34,7 @@ pub fn raw(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
-        return Err("usage: raw <config_id> <channel>".into());
+        return Err("usage: join <config_id> <channel>".into());
     }
 
     {
@@ -51,7 +51,7 @@ pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn part(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
-        return Err("usage: raw <config_id> <channel>".into());
+        return Err("usage: part <config_id> <channel>".into());
     }
     {
         let db = ctx.bot().sql().lock();
