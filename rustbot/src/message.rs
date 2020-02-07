@@ -1,49 +1,150 @@
 use rustbot::prelude::*;
+use std::borrow::Cow;
+
+fn paste(text: &str) -> Result<String> {
+    let client = reqwest::Client::new();
+    let mut result = client.post("http://ix.io").form(&[("f:1", text)]).send()?;
+
+    let url = result.text()?;
+
+    Ok(format!("[full message: {}]", url.trim()))
+}
 
 fn paste_max_lines(input: String, max_lines: usize) -> Result<(Vec<String>, Option<String>)> {
     let lines: Vec<String> = input.split('\n').map(std::string::ToString::to_string).collect();
     if lines.len() > max_lines {
-        let client = reqwest::Client::new();
-        let mut result = client.post("http://ix.io").form(&[("f:1", input)]).send()?;
-
-        let url = result.text()?;
-
-        Ok((
-            lines[0..max_lines - 1].to_vec(),
-            Some(format!("[full message: {}]", url.trim())),
-        ))
+        let v = lines[0..max_lines - 1].to_vec();
+        Ok((v, Some(paste(&input)?)))
     } else {
         Ok((lines, None))
     }
 }
 
-pub fn format_irc(m: Message) -> Result<Vec<String>> {
-    match m {
-        Message::Simple(s) | Message::Code(s) => match paste_max_lines(s, 3)? {
-            (lines, None) => Ok(lines),
-            (mut lines, Some(extra)) => {
-                lines.push(extra);
-                Ok(lines)
+fn render_irc(spans: Vec<Span>) -> String {
+    let mut col = Color::None;
+    let mut fmt = Format::None;
+    let mut st = "".to_string();
+
+    for sp in &spans {
+        let (c, f, s) = sp.decompose();
+
+        if c == col && f == fmt {
+            st.push_str(&s);
+            continue;
+        }
+
+        if c == Color::None && f == Format::None {
+            col = c;
+            fmt = f;
+            st.push('\x0F');
+            st.push_str(&s);
+            continue;
+        }
+
+        if c != col {
+            match c {
+                Color::None => {
+                    if f == fmt && s.starts_with(|c| '0' <= c && c <= '9') {
+                        st.push_str("\x03\x02\x02")
+                    } else {
+                        st.push('\x03')
+                    }
+                }
+                _ => {
+                    let code = match c {
+                        Color::None => unreachable!(),
+                        Color::Red => "\x0304",
+                        Color::Yellow => "\x0308",
+                        Color::Green => "\x0309",
+                    };
+                    st.push_str(code);
+                    if f == fmt && s.starts_with(',') {
+                        st.push_str("\x02\x02");
+                    }
+                }
             }
-        },
+            col = c;
+        }
+
+        if f != fmt {
+            let toggle = f ^ fmt;
+            if toggle.contains(Format::Bold) {
+                st.push('\x02');
+            }
+            if toggle.contains(Format::Italic) {
+                st.push('\x1D');
+            }
+            if toggle.contains(Format::Underline) {
+                st.push('\x1F');
+            }
+
+            fmt = f;
+        }
+
+        st.push_str(&s);
+    }
+
+    st
+}
+
+pub fn format_irc(m: Message) -> Result<Vec<String>> {
+    let msg = match m {
+        Message::Simple(s) | Message::Code(s) => s,
+        Message::Spans(s) => render_irc(s),
+    };
+
+    match paste_max_lines(msg, 3)? {
+        (vec, None) => Ok(vec),
+        (mut vec, Some(link)) => {
+            vec.push(link);
+            Ok(vec)
+        }
+    }
+}
+
+fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
+    match s {
+        Span::Simple(st) | Span::Colored(_, st) => Cow::Borrowed(st),
+        Span::Formatted(f, st) | Span::Text(_, f, st) => {
+            let mut formats = "".to_string();
+            if f.contains(Format::Italic) {
+                formats += "*";
+            }
+            if f.contains(Format::Bold) {
+                formats += "**";
+            }
+            if f.contains(Format::Underline) {
+                formats += "__";
+            }
+
+            return Cow::Owned(format!(
+                "\u{FEFF}{}{}{}\u{FEFF}",
+                formats,
+                st,
+                formats.chars().rev().collect::<String>()
+            ));
+        }
     }
 }
 
 pub fn format_discord(m: Message) -> Result<String> {
-    match m {
-        Message::Simple(s) => match paste_max_lines(s, 11)? {
-            (lines, None) => Ok(lines.join("\n")),
-            (lines, Some(extra)) => Ok(format!("{}\n{}", lines.join("\n"), extra)),
-        },
-        Message::Code(s) => {
-            if !s.contains('\n') {
-                Ok(format!("`{}`", s))
-            } else {
-                match paste_max_lines(s, 11)? {
-                    (lines, None) => Ok(format!("```\n{}\n```", lines.join("\n"))),
-                    (lines, Some(extra)) => Ok(format!("```\n{}\n```{}", lines.join("\n"), extra)),
-                }
-            }
+    let (msg, code) = match m {
+        Message::Simple(s) => (s, false),
+        Message::Code(s) => (s, true),
+        Message::Spans(s) => (s.iter().map(render_dis).collect::<Vec<Cow<str>>>().join(""), false),
+    };
+
+    if code && !msg.contains('\n') {
+        Ok(format!("`{}`", msg))
+    } else {
+        let (mut res, url) = paste_max_lines(msg, 11)?;
+        if let Some(u) = url {
+            res.push(u);
+        }
+        if code {
+            Ok(format!("```{}```", res.join("\n")))
+        } else {
+            Ok(res.join("\n"))
         }
     }
 }

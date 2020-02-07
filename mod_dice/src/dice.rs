@@ -1,8 +1,12 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Display;
 use std::iter;
+
+use rustbot::prelude::{span_join, Color, Format, Span};
+use rustbot::spans;
 
 // enums
 use self::EvaluatedValue::*;
@@ -31,14 +35,14 @@ pub fn parse(input: &str) -> Result<Expression, String> {
         .map_err(|e| format!("{:?}", e))
 }
 
-pub fn eval(expr: &Expression) -> Result<String, String> {
+pub fn eval(expr: &Expression) -> Result<Vec<Span>, String> {
     let (s, v) = expr.eval()?;
 
-    Ok(format!("{}: {}", v.to_string(), s))
+    Ok(spans!(v.to_string(), ": ", s))
 }
 
 trait Evaluable {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String>;
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String>;
 }
 enum EvaluatedValue {
     Integer(i64),
@@ -95,7 +99,7 @@ pub struct Expression {
     pub expr: Repeat, // ...
 }
 impl Evaluable for Expression {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         self.expr.eval()
     }
 }
@@ -115,20 +119,21 @@ pub struct Repeat {
     pub term: Comparison,    // ...
 }
 impl Evaluable for Repeat {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         match self.repeat {
             None => self.term.eval(),
             Some(n) if n > 10 => Err("no".to_string()),
             Some(n) => {
-                let mut strings: Vec<String> = vec![];
-                let mut values: Vec<EvaluatedValue> = vec![];
-                for _ in 0..n {
-                    let (s, v) = self.term.eval()?;
-                    strings.push(s);
-                    values.push(v);
-                }
-                let result: Result<Vec<i64>, String> = values.iter().map(|v| v.as_i64()).collect();
-                Ok((strings.join(", "), IntSlice(result?)))
+                let (strs, vals) = (0..n)
+                    .map(|_| {
+                        let (s, v) = self.term.eval()?;
+                        Ok((s, v.as_i64()?))
+                    })
+                    .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
+                    .drain(..)
+                    .unzip();
+
+                Ok((span_join(strs, ", "), IntSlice(vals)))
             }
         }
     }
@@ -145,17 +150,16 @@ pub struct Comparison {
     pub right: Option<(CompareOp, AddSub)>, // ( operator ... )?
 }
 impl Evaluable for Comparison {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let l = self.left.eval()?;
         match &self.right {
             None => Ok(l),
             Some((op, term)) => {
                 let r = term.eval()?;
                 let (os, v) = op.apply(l.1, r.1)?;
-                match os {
-                    None => Ok((format!("{}{}{}", l.0, op, r.0), v)),
-                    Some(s) => Ok((format!("{}{}{}={}", l.0, op, r.0, s), v)),
-                }
+
+                let left = spans!(l.0, format!("{}", op), r.0);
+                Ok((if os.is_empty() { left } else { spans!(left, "=", os) }, v))
             }
         }
     }
@@ -172,13 +176,14 @@ pub struct AddSub {
     pub right: Vec<(AddSubOp, MulDiv)>, // ( operator ... )*
 }
 impl Evaluable for AddSub {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let (s, mut l) = self.left.eval()?;
         let mut ss = s;
         for elem in &self.right {
-            let (rs, r) = elem.1.eval()?;
+            let (mut rs, r) = elem.1.eval()?;
 
-            ss = format!("{}{}{}", ss, elem.0, rs);
+            ss.push(format!("{}", elem.0).into());
+            ss.append(&mut rs);
             l = elem.0.apply(l, r)?;
         }
         Ok((ss, l))
@@ -196,13 +201,14 @@ pub struct MulDiv {
     pub right: Vec<(MulDivOp, Sum)>, // ( operator ... )*
 }
 impl Evaluable for MulDiv {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let (s, mut l) = self.left.eval()?;
         let mut ss = s;
         for elem in &self.right {
-            let (rs, r) = elem.1.eval()?;
+            let (mut rs, r) = elem.1.eval()?;
 
-            ss = format!("{}{}{}", ss, elem.0, rs);
+            ss.push(format!("{}", elem.0).into());
+            ss.append(&mut rs);
             l = elem.0.apply(l, r)?;
         }
         Ok((ss, l))
@@ -220,10 +226,10 @@ pub struct Sum {
     pub term: DiceMod, // ...
 }
 impl Evaluable for Sum {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let (s, v) = self.term.eval()?;
         if self.is_sum {
-            Ok((format!("s{}", s), Integer(v.as_i64()?)))
+            Ok((spans!("s", s), Integer(v.as_i64()?)))
         } else {
             Ok((s, v))
         }
@@ -241,7 +247,7 @@ pub struct DiceMod {
     pub op: Option<(ModOp, Value)>, // ( operator ... )?
 }
 impl Evaluable for DiceMod {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         match &self.op {
             None => self.roll.eval(),
             Some((op, r)) => match self.roll {
@@ -249,13 +255,13 @@ impl Evaluable for DiceMod {
                     let l = self.roll.eval()?;
                     let (rs, rv) = r.eval()?;
                     let (_, v) = op.apply(l.1, rv)?;
-                    Ok((format!("{}{}{}", l.0, op, rs), v))
+                    Ok((spans!(l.0, format!("{}", op), rs), v))
                 }
                 DiceRoll::Roll { .. } => {
                     let (s, l) = self.roll._eval()?;
                     let (rs, rv) = r.eval()?;
                     let (vs, v) = op.apply(l, rv)?;
-                    Ok((format!("{}{}{}:{}", s, op, rs, vs), v))
+                    Ok((spans!(s, format!("{}", op), rs, ":", vs), v))
                 }
             },
         }
@@ -304,17 +310,17 @@ pub enum DiceRoll {
     },
 }
 impl Evaluable for DiceRoll {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let (s, r) = self._eval()?;
         match self {
             DiceRoll::NoRoll(_) => Ok((s, r)),
-            DiceRoll::Roll { .. } => Ok((format!("{}:{:?}", s, r.as_int_slice()?), r)),
+            DiceRoll::Roll { .. } => Ok((spans!(s, format!(":{:?}", r.as_int_slice()?)), r)),
         }
     }
 }
 
 impl DiceRoll {
-    fn _eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn _eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         match self {
             DiceRoll::NoRoll(v) => v.eval(),
             DiceRoll::Roll {
@@ -331,7 +337,7 @@ impl DiceRoll {
                         }
                         (vs, count)
                     }
-                    None => ("".to_string(), 1),
+                    None => (vec![], 1),
                 };
                 let (ss, s) = match sv {
                     Some(v) => {
@@ -349,7 +355,7 @@ impl DiceRoll {
                         };
                         (vs, opts)
                     }
-                    None => ("".to_string(), vec![1, 2, 3, 4, 5, 6]),
+                    None => (vec![], vec![1, 2, 3, 4, 5, 6]),
                 };
 
                 if s.is_empty() {
@@ -388,11 +394,11 @@ impl DiceRoll {
                     })
                     .collect();
 
-                let exp_str = match ex {
-                    None => "".to_string(),
-                    Some(exp) => exp.to_string(),
+                let exp_str: Cow<str> = match ex {
+                    None => "".into(),
+                    Some(exp) => format!("{}", exp).into(),
                 };
-                Ok((format!("{}d{}{}", cs, ss, exp_str), IntSlice(results)))
+                Ok((spans!(cs, "d", ss, exp_str), IntSlice(results)))
             }
         }
     }
@@ -414,26 +420,28 @@ pub enum Value {
     Hundred,                // "%"
 }
 impl Evaluable for Value {
-    fn eval(&self) -> Result<(String, EvaluatedValue), String> {
+    fn eval(&self) -> Result<(Vec<Span>, EvaluatedValue), String> {
         match self {
-            Value::Integer(i) => Ok((format!("{}", i), Integer(*i))),
+            Value::Integer(i) => Ok((spans!(format!("{}", i)), Integer(*i))),
             Value::Sub(expr) => {
                 let (es, ev) = expr.eval()?;
-                Ok((format!("({})", es), ev))
+                Ok((spans!("(", es, ")"), ev))
             }
             Value::Slice(s) => {
-                let r: Result<Vec<(String, EvaluatedValue)>, _> = s.iter().map(|v| v.eval()).collect();
-                match r {
-                    Err(e) => Err(e),
-                    Ok(v) => {
-                        let strs: Vec<String> = v.iter().map(|&(ref s, _)| s.clone()).collect();
-                        let vals: Result<Vec<i64>, String> = v.iter().map(|&(_, ref v)| v.as_i64()).collect();
-                        Ok((format!("[{}]", strs.join(", ")), IntSlice(vals?)))
-                    }
-                }
+                let (strs, vals) = s
+                    .iter()
+                    .map(|e| {
+                        let (s, v) = e.eval()?;
+                        Ok((s, v.as_i64()?))
+                    })
+                    .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
+                    .drain(..)
+                    .unzip();
+
+                Ok((spans!("[", span_join(strs, ", "), "]"), IntSlice(vals)))
             }
-            Value::Fate => Ok(("F".to_string(), IntSlice(vec![-1, 0, 1]))),
-            Value::Hundred => Ok(("%".to_string(), Integer(100))),
+            Value::Fate => Ok((spans!("F"), IntSlice(vec![-1, 0, 1]))),
+            Value::Hundred => Ok((spans!("%"), Integer(100))),
         }
     }
 }
@@ -518,26 +526,26 @@ impl CompareOp {
             CompareOp::Unequal => l != r,
         }
     }
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Option<String>, EvaluatedValue), String> {
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let l = match left {
             Integer(v) => Ok(v),
             IntSlice(v) => IntSlice(v).as_i64(),
             v => Err(format!("cannot compare {} {} {}", v, self, right)),
         }?;
         match right {
-            Integer(r) => Ok((None, Bool(self.compare(l, r)))),
+            Integer(r) => Ok((vec![], Bool(self.compare(l, r)))),
             IntSlice(s) => {
-                let (strings, values): (Vec<String>, Vec<bool>) = s
+                let (strings, values): (Vec<Span>, Vec<bool>) = s
                     .iter()
                     .map(|r| {
                         if self.compare(l, *r) {
-                            (format!("{}{}{}", GREEN, *r, RESET), true)
+                            (Span::Colored(Color::Green, format!("{}", *r).into()), true)
                         } else {
-                            (format!("{}{}{}", RED, *r, RESET), false)
+                            (Span::Colored(Color::Red, format!("{}", *r).into()), false)
                         }
                     })
                     .unzip();
-                Ok((Some(format!("[{}]", strings.join(", "))), BoolSlice(values)))
+                Ok((spans!("[", span_join(strings, ", "), "]"), BoolSlice(values)))
             }
             v => Err(format!("cannot compare {} {} {}", l, self, v)),
         }
@@ -570,32 +578,30 @@ pub enum ModOp {
     KeepHighest, // H
 }
 
-const RED: &str = "\x0304";
-const YELLOW: &str = "\x0308";
-const GREEN: &str = "\x0309";
-const RESET: &str = "\x03\x02\x02";
-
-fn format_arrays(ac: &str, aa: &[i64], bc: &str, ba: &[i64]) -> String {
-    let a: Vec<String> = aa.iter().map(|v| format!("{}{}{}", ac, v, RESET)).collect();
-    let b: Vec<String> = ba.iter().map(|v| format!("{}{}{}", bc, v, RESET)).collect();
-    return format!("[{}, {}]", a.join(", "), b.join(", "));
+fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'static>> {
+    let vec = Iterator::chain(
+        aa.iter().map(|v| Span::Text(ac, Format::Bold, format!("{}", v).into())),
+        ba.iter().map(|v| Span::Text(bc, Format::Bold, format!("{}", v).into())),
+    )
+    .collect::<Vec<_>>();
+    spans!("[", span_join(vec, ", "), "]")
 }
 
 impl ModOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(String, EvaluatedValue), String> {
+    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Vec<Span>, EvaluatedValue), String> {
         let mut l = left.as_int_slice()?;
         l.sort();
         let r = right.as_i64()? as usize;
         let (s, result) = match self {
-            ModOp::DropLowest => (format_arrays(RED, &l[..r], YELLOW, &l[r..]), &l[r..]),
+            ModOp::DropLowest => (format_arrays(Color::Red, &l[..r], Color::Yellow, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
                 let i = l.len() - r;
-                (format_arrays(YELLOW, &l[..i], RED, &l[i..]), &l[..i])
+                (format_arrays(Color::Yellow, &l[..i], Color::Red, &l[i..]), &l[..i])
             }
-            ModOp::KeepLowest => (format_arrays(YELLOW, &l[..r], RED, &l[r..]), &l[..r]),
+            ModOp::KeepLowest => (format_arrays(Color::Yellow, &l[..r], Color::Red, &l[r..]), &l[..r]),
             ModOp::KeepHighest => {
                 let i = l.len() - r;
-                (format_arrays(RED, &l[..i], YELLOW, &l[i..]), &l[i..])
+                (format_arrays(Color::Red, &l[..i], Color::Yellow, &l[i..]), &l[i..])
             }
         };
         Ok((s, IntSlice(result.to_vec())))

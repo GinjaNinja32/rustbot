@@ -15,5 +15,5 @@ pub fn get_meta(meta: &mut dyn Meta) {
 fn cmd_dice(ctx: &dyn Context, args: &str) -> Result<()> {
     let v = dice::parse(args)?;
     let result = dice::eval(&v)?;
-    ctx.say(result.as_str())
+    ctx.reply(Message::Spans(result))
 }

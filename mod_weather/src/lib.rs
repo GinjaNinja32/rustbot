@@ -12,7 +12,6 @@ mod airport;
 use chrono::NaiveDateTime;
 use rustbot::prelude::*;
 use serde::Deserialize;
-use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct Module {
@@ -22,7 +21,7 @@ struct Module {
 #[no_mangle]
 pub fn get_meta_conf(meta: &mut dyn Meta, config: toml::Value) -> Result<()> {
     let m: Module = config.try_into()?;
-    meta.cmd("weather", Command::arc(Arc::new(move |ctx, args| m.weather(ctx, args))));
+    meta.cmd("weather", Command::new(move |ctx, args| m.weather(ctx, args)));
     Ok(())
 }
 

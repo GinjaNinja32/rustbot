@@ -3,6 +3,7 @@
 use parking_lot::Mutex;
 use postgres::types::FromSql;
 use postgres::Connection;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -51,12 +52,9 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new(f: fn(&dyn Context, &str) -> Result<()>) -> Self {
-        Self::arc(Arc::new(f))
-    }
-    pub fn arc(f: Arc<CommandFn>) -> Self {
+    pub fn new<F: 'static + Fn(&Context, &str) -> Result<()> + Send + Sync>(f: F) -> Self {
         Self {
-            function: f,
+            function: Arc::new(f),
             req_perms: Perms::None,
         }
     }
@@ -100,7 +98,130 @@ pub trait Context {
     fn source_str(&self) -> String;
 }
 
-pub enum Message {
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum Color {
+    None,
+    Red,
+    Yellow,
+    Green,
+}
+
+bitflags! {
+    pub struct Format: u8 {
+        const None = 0x00;
+        const Bold = 0x01;
+        const Italic = 0x02;
+        const Underline = 0x04;
+    }
+}
+
+pub enum Message<'a> {
     Simple(String),
+    Spans(Vec<Span<'a>>),
     Code(String),
+}
+
+#[derive(Clone)]
+pub enum Span<'a> {
+    Simple(Cow<'a, str>),
+    Colored(Color, Cow<'a, str>),
+    Formatted(Format, Cow<'a, str>),
+    Text(Color, Format, Cow<'a, str>),
+}
+
+impl<'a> From<String> for Span<'a> {
+    fn from(s: String) -> Self {
+        Span::Simple(s.into())
+    }
+}
+
+impl<'a> From<&'a str> for Span<'a> {
+    fn from(s: &'a str) -> Self {
+        Span::Simple(s.into())
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for Span<'a> {
+    fn from(s: Cow<'a, str>) -> Self {
+        Span::Simple(s)
+    }
+}
+
+impl Span<'_> {
+    pub fn decompose(&self) -> (Color, Format, &str) {
+        match self {
+            Span::Simple(s) => (Color::None, Format::None, s),
+            Span::Colored(c, s) => (*c, Format::None, s),
+            Span::Formatted(f, s) => (Color::None, *f, s),
+            Span::Text(c, f, s) => (*c, *f, s),
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! spans {
+    ($($x:expr),*) => {{
+        let mut v: Vec<Span> = vec![];
+        $(
+            $crate::types::MoveToVecSpan::move_to_vec_span($x, &mut v);
+        )*
+        v
+    }};
+    ($($x:expr,)*) => ($crate::spans![$($x),*])
+}
+
+pub fn span_join<'a>(mut spans: Vec<impl MoveToVecSpan<'a>>, sep: impl CopyToVecSpan<'a> + 'a) -> Vec<Span<'a>> {
+    let mut v = vec![];
+    if spans.is_empty() {
+        return v;
+    }
+    spans.remove(0).move_to_vec_span(&mut v);
+    if spans.is_empty() {
+        return v;
+    }
+
+    for el in spans.drain(..) {
+        sep.copy_to_vec_span(&mut v);
+        el.move_to_vec_span(&mut v);
+    }
+
+    v
+}
+
+mod private {
+    use types::Span;
+
+    pub trait Sealed {}
+
+    impl<'a> Sealed for Vec<Span<'a>> {}
+    impl<'a, T: Into<Span<'a>>> Sealed for T {}
+
+    pub trait SealedCopy {}
+
+    impl<'a, T: Sealed + Copy> SealedCopy for T {}
+}
+
+pub trait MoveToVecSpan<'a>: private::Sealed {
+    fn move_to_vec_span(self, &mut Vec<Span<'a>>);
+}
+
+impl<'a> MoveToVecSpan<'a> for Vec<Span<'a>> {
+    fn move_to_vec_span(mut self, v: &mut Vec<Span<'a>>) {
+        v.append(&mut self);
+    }
+}
+impl<'a, T: Into<Span<'a>>> MoveToVecSpan<'a> for T {
+    fn move_to_vec_span(self, v: &mut Vec<Span<'a>>) {
+        v.push(self.into());
+    }
+}
+
+pub trait CopyToVecSpan<'a>: private::SealedCopy {
+    fn copy_to_vec_span(&self, &mut Vec<Span<'a>>);
+}
+
+impl<'a, T: MoveToVecSpan<'a> + Copy> CopyToVecSpan<'a> for T {
+    fn copy_to_vec_span(&self, v: &mut Vec<Span<'a>>) {
+        self.clone().move_to_vec_span(v);
+    }
 }
