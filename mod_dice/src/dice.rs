@@ -592,6 +592,13 @@ impl ModOp {
         let mut l = left.as_int_slice()?;
         l.sort();
         let r = right.as_i64()? as usize;
+        if r > l.len() {
+            return Err(format!(
+                "cannot evaluate a keep/drop {} operation on {} dice",
+                r,
+                l.len()
+            ));
+        }
         let (s, result) = match self {
             ModOp::DropLowest => (format_arrays(Color::Red, &l[..r], Color::Yellow, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
