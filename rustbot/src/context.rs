@@ -36,7 +36,6 @@ impl<'a> types::Context for Context<'a> {
     fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
             IRC { prefix, channel } => {
-                println!("{:?}, {:?}", prefix, channel);
                 if let Some(User { nick, .. }) = prefix {
                     match channel {
                         None => {
