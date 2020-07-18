@@ -3,6 +3,7 @@ use crate::message;
 use rustbot::prelude::*;
 use rustbot::types;
 use serenity::model::prelude as ser;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 pub use self::Prefix::*;
@@ -16,12 +17,16 @@ pub struct Context<'a> {
 }
 
 impl<'a> types::Context for Context<'a> {
+    fn config_id(&self) -> &str {
+        &self.config
+    }
+
     fn bot(&self) -> &(dyn Bot + Sync) {
         self.bot
     }
 
-    fn source_str(&self) -> String {
-        format!("{}", self.source)
+    fn source(&self) -> &dyn types::Source {
+        &self.source
     }
 
     fn say(&self, message: &str) -> Result<()> {
@@ -123,17 +128,71 @@ pub enum Source {
     },
 }
 
-impl std::fmt::Display for Source {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+impl types::Source for Source {
+    fn user_string(&self) -> Cow<str> {
         match self {
             IRC { prefix, .. } => {
                 if let Some(prefix) = prefix {
-                    write!(f, "{}", prefix)
+                    format!("{}", prefix).into()
                 } else {
-                    write!(f, "None")
+                    "none".into()
                 }
             }
-            Discord { user, guild, .. } => write!(f, "{:?}:{}", guild.map(|g| *g.as_u64()), user.id.as_u64()),
+            Discord { user, guild, .. } => format!("{:?}:{}", guild.map(|g| *g.as_u64()), user.id.as_u64()).into(),
+        }
+    }
+
+    fn user_pretty(&self) -> Cow<str> {
+        match self {
+            IRC { prefix, .. } => match prefix {
+                Some(User { nick, .. }) => nick.into(),
+                Some(Server(s)) => s.into(),
+                None => "???".into(),
+            },
+            Discord { user, .. } => (&user.name).into(),
+        }
+    }
+
+    fn channel_string(&self) -> Cow<str> {
+        match self {
+            IRC { channel, .. } => {
+                if let Some(channel) = channel {
+                    format!("irc:{}", channel)
+                } else {
+                    "irc:query".to_string()
+                }
+            }
+            Discord { channel, guild, .. } => format!(
+                "dis:{}:{}",
+                guild
+                    .map(|g| format!("{}", *g.as_u64()))
+                    .unwrap_or_else(|| "none".to_string()),
+                channel.as_u64()
+            ),
+        }
+        .into()
+    }
+
+    fn get_discord_params(&self) -> Option<(Option<u64>, u64, u64)> {
+        if let Discord {
+            guild, channel, user, ..
+        } = self
+        {
+            Some((guild.map(|g| *g.as_u64()), *channel.as_u64(), *user.id.as_u64()))
+        } else {
+            None
+        }
+    }
+
+    fn get_irc_params(&self) -> Option<(Option<String>, String)> {
+        if let IRC { prefix, channel, .. } = self {
+            match prefix {
+                Some(User { nick, .. }) => Some((channel.clone(), nick.clone())),
+                Some(Server(s)) => Some((channel.clone(), s.clone())),
+                None => None,
+            }
+        } else {
+            None
         }
     }
 }

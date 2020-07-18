@@ -14,15 +14,15 @@ crate-type = ["dylib"]
 
 [dependencies]
 libloading = "0.5.0"
-irc = "0.13.6"
+irc = { version = "0.13.6", default-features = false }
 toml = "0.4.10"
 reqwest = "0.9.11"
 bitflags = "1.0.4"
 migrant_lib = { version = "0.23.0", features = ["d-postgres"] }
 rayon = "1.0"
-serenity = "0.6"
+serenity = { version = "0.6", default-features = false, features = ["builder", "cache", "client", "gateway", "http", "model", "utils", "rustls_backend"] }
 command_attr = "=0.1.6"
-parking_lot = { version = "0.7", features = ["deadlock_detection"] }
+parking_lot = { version = "0.9", features = ["deadlock_detection"] }
 serde = { version = "1.0.87", features = ["derive"] }
 serde_json = "1.0.39"
 regex = "1.1.2"
