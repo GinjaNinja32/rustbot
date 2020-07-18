@@ -36,13 +36,16 @@ impl<'a> types::Context for Context<'a> {
     fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
             IRC { prefix, channel } => {
-                if let Some(ch) = channel {
-                    if let Some(User { nick, .. }) = prefix {
-                        if *ch == self.bot_name {
+                println!("{:?}, {:?}", prefix, channel);
+                if let Some(User { nick, .. }) = prefix {
+                    match channel {
+                        None => {
                             for msg in message::format_irc(message)? {
                                 self.bot.irc_send_privmsg(&self.config, nick.as_str(), msg.as_str())?;
                             }
-                        } else {
+                        }
+
+                        Some(ch) => {
                             for msg in message::format_irc(message)? {
                                 self.bot.irc_send_privmsg(
                                     &self.config,
