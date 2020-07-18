@@ -134,9 +134,12 @@ impl Rustbot {
     fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
         let cmdchars: String = {
             let db = ctx.bot().sql().lock();
-            db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?
-                .get(0)
-                .get(0)
+            let chars = db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?;
+            if chars.is_empty() {
+                "".to_string()
+            } else {
+                chars.get(0).get(0)
+            }
         };
 
         let enabled = {
