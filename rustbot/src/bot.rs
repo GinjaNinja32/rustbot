@@ -579,6 +579,7 @@ pub fn start() -> Result<()> {
                             port: Some(c.port),
                             use_ssl: Some(c.ssl),
                             channels: Some(channels.clone()),
+                            nick_password: c.pass.clone(),
                             ..Default::default()
                         })
                         .map_err(from_irc)?,

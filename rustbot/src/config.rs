@@ -35,6 +35,8 @@ pub struct IRC {
     pub server: String,
     pub port: u16,
 
+    pub pass: Option<String>,
+
     pub ssl: bool,
 }
 
