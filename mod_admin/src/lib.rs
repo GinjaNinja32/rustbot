@@ -26,8 +26,9 @@ pub fn get_meta(meta: &mut dyn Meta) {
 
 fn whoami(ctx: &dyn Context, _: &str) -> Result<()> {
     ctx.reply(Message::Simple(format!(
-        "You are {}\nFlags: {}",
-        ctx.source_str(),
+        "You are {} in channel {}\nFlags: {}",
+        ctx.source().user_string(),
+        ctx.source().channel_string(),
         ctx.perms()?
     )))
 }

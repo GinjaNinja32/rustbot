@@ -9,6 +9,7 @@ use regex::Regex;
 use serde::Deserialize;
 use serde_json;
 use serenity::model::channel;
+use serenity::model::guild;
 use serenity::model::id::*;
 use serenity::prelude as dis;
 use std::collections::BTreeMap;
@@ -17,6 +18,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::message;
 use config;
 use context;
 use context::Prefix;
@@ -59,9 +61,17 @@ fn irc_parse_prefix(prefix: Option<String>) -> Option<context::Prefix> {
 impl Rustbot {
     fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
         if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
+            let mut typ = HandleType::None;
+
+            if channel == bot_name {
+                typ |= HandleType::Private
+            } else {
+                typ |= HandleType::Public
+            }
+
             let source = context::IRC {
                 prefix: irc_parse_prefix(irc_msg.prefix),
-                channel: Some(channel),
+                channel: if channel == bot_name { None } else { Some(channel) },
             };
             let ctx = &context::Context {
                 bot: self,
@@ -69,11 +79,30 @@ impl Rustbot {
                 source,
                 bot_name: bot_name.to_string(),
             };
-            self.handle(ctx, message.as_str());
+            self.handle(ctx, typ, message.as_str());
         }
     }
 
     fn dis_incoming(&self, cfg: String, disctx: dis::Context, msg: channel::Message) {
+        if msg.author.id == disctx.cache.read().user.id {
+            return;
+        }
+
+        let mut typ = HandleType::None;
+
+        match msg.channel_id.to_channel(&disctx) {
+            Err(e) => {
+                println!("failed to determine channel type for incoming message: {}", e);
+                return;
+            }
+            Ok(c) => match c {
+                channel::Channel::Private(_) => typ |= HandleType::Private,
+                channel::Channel::Group(_) => typ |= HandleType::Group,
+                channel::Channel::Guild(_) => typ |= HandleType::Public,
+                _ => return,
+            },
+        }
+
         let ctx = &context::Context {
             bot: self,
             config: cfg,
@@ -88,11 +117,11 @@ impl Rustbot {
             bot_name: "".to_string(),
         };
 
-        self.handle(ctx, msg.content.as_str());
+        self.handle(ctx, typ, msg.content.as_str());
     }
 
-    fn handle(&self, ctx: &context::Context, message: &str) {
-        match self.handle_inner(ctx, message) {
+    fn handle(&self, ctx: &context::Context, typ: HandleType, message: &str) {
+        match self.handle_inner(ctx, typ, message) {
             Ok(()) => (),
             Err(err) => {
                 if let Err(e) = ctx.say(&format!("command failed: {}", err)) {
@@ -102,13 +131,26 @@ impl Rustbot {
         }
     }
 
-    fn handle_inner(&self, ctx: &context::Context, message: &str) -> Result<()> {
+    fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
         let cmdchars: String = {
             let db = ctx.bot().sql().lock();
             db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?
                 .get(0)
                 .get(0)
         };
+
+        let enabled = {
+            let db = ctx.bot().sql().lock();
+            let mods: Vec<String> = db.query(
+                    "SELECT name FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND modules.enabled",
+                    &[&ctx.config],
+                )?
+                .iter()
+                .map(|row| row.get(0))
+                .collect();
+            mods
+        };
+
         if message.starts_with(|c| cmdchars.contains(c)) {
             // it's a command!
             let prefix = message.chars().take(1).next().unwrap();
@@ -118,16 +160,27 @@ impl Rustbot {
 
             let res = self.commands.read().get(&cmd).cloned();
             if let Some((m, f)) = res {
-                {
-                    let db = ctx.bot().sql().lock();
-                    if db.query("SELECT 1 FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND name = $2 AND modules.enabled", &[&ctx.config, &m])?.is_empty() {
-                        return Ok(());
-                    }
+                if enabled.contains(&m) {
+                    f.call(ctx, &args)?;
                 }
-
-                return f.call(ctx, &args);
             }
-            return Ok(());
+
+            typ |= HandleType::Command;
+        } else {
+            typ |= HandleType::PlainMsg;
+        }
+
+        for name in enabled {
+            if let Some(m) = self.modules.read().get(&name) {
+                m.rent::<_, Result<()>>(|meta| {
+                    for (ty, handler) in &meta.handlers {
+                        if ty.contains(typ) {
+                            handler(ctx, message)?;
+                        }
+                    }
+                    Ok(())
+                })?;
+            }
         }
 
         Ok(())
@@ -192,6 +245,27 @@ impl Rustbot {
         }
 
         Ok((newcmd, args))
+    }
+
+    fn dis_get_replacements(&self, guild: impl std::ops::Deref<Target = guild::Guild>) -> Vec<(String, String)> {
+        let mut replacements = vec![];
+        for (id, m) in &guild.members {
+            replacements.push((format!("@{}", m.user.read().name), format!("<@!{}>", id)));
+        }
+
+        for (id, r) in &guild.roles {
+            replacements.push((format!("@{}", r.name), format!("<@&{}>", id)));
+        }
+
+        for (id, c) in &guild.channels {
+            replacements.push((format!("#{}", c.read().name), format!("<#{}>", id)));
+        }
+
+        for (id, e) in &guild.emojis {
+            replacements.push((format!(":{}:", e.name), format!("<:{}:{}>", e.name, id)));
+        }
+
+        replacements
     }
 }
 
@@ -327,6 +401,50 @@ impl types::Bot for Rustbot {
         }
     }
 
+    fn dis_unprocess_message(&self, config: &str, guild: &str, message: &str) -> Result<String> {
+        let cache_and_http = match self.caches.read().get(config) {
+            None => return Err(format!("no cache found for config {:?}", config).into()),
+            Some(c) => Arc::clone(&c),
+        };
+
+        let cache = cache_and_http.cache.read();
+
+        let mut message = message.to_string();
+
+        let guildobj = {
+            if let Ok(id) = guild.parse() {
+                cache.guilds.get(&GuildId(id))
+            } else {
+                let mut v = None;
+                for g in cache.guilds.values() {
+                    if g.read().name == guild {
+                        v = Some(g);
+                        break;
+                    }
+                }
+                v
+            }
+        }
+        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "guild not found".into())?
+        .read();
+
+        let mut replacements = self.dis_get_replacements(guildobj);
+
+        replacements.sort_by(|l, r| {
+            if l.1.len() != r.1.len() {
+                return l.1.len().cmp(&r.1.len()).reverse();
+            }
+
+            l.1.cmp(&r.1)
+        });
+
+        for (replace, find) in replacements {
+            message = message.replace(&find, &replace);
+        }
+
+        Ok(message)
+    }
+
     fn dis_send_message(&self, config: &str, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
         let cache_and_http = match self.caches.read().get(config) {
             None => return Err(format!("no cache found for config {:?}", config).into()),
@@ -375,22 +493,7 @@ impl types::Bot for Rustbot {
         if process {
             let mut message = message.to_string();
 
-            let mut replacements = vec![];
-            for (id, m) in &guildobj.members {
-                replacements.push((format!("@{}", m.user.read().name), format!("<@{}>", id)));
-            }
-
-            for (id, r) in &guildobj.roles {
-                replacements.push((format!("@{}", r.name), format!("<@&{}>", id)));
-            }
-
-            for (id, c) in &guildobj.channels {
-                replacements.push((format!("#{}", c.read().name), format!("<#{}>", id)));
-            }
-
-            for (id, e) in &guildobj.emojis {
-                replacements.push((format!(":{}:", e.name), format!("<:{}:{}>", e.name, id)));
-            }
+            let mut replacements = self.dis_get_replacements(guildobj);
 
             replacements.sort_by(|l, r| {
                 if l.0.len() != r.0.len() {
@@ -410,6 +513,21 @@ impl types::Bot for Rustbot {
         }
 
         Ok(())
+    }
+
+    fn send_message(&self, config: &str, source: &str, msg: Message) -> Result<()> {
+        let parts: Vec<_> = source.split(":").collect();
+        if parts[0] == "irc" && parts.len() == 2 {
+            let msg = message::format_irc(msg)?;
+            for line in msg {
+                self.irc_send_privmsg(config, parts[1], &line)?;
+            }
+            Ok(())
+        } else if parts[0] == "dis" && parts.len() == 3 {
+            self.dis_send_message(config, parts[1], parts[2], &message::format_discord(msg)?, true)
+        } else {
+            Err("invalid source".into())
+        }
     }
 }
 
@@ -593,6 +711,7 @@ fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
 pub struct Meta {
     commands: BTreeMap<String, Command>,
     deinit: Option<Box<DeinitFn>>,
+    handlers: Vec<(HandleType, Box<MsgHandlerFn>)>,
 }
 
 impl Meta {
@@ -600,6 +719,7 @@ impl Meta {
         Self {
             commands: BTreeMap::new(),
             deinit: None,
+            handlers: Vec::new(),
         }
     }
 }
@@ -610,6 +730,9 @@ impl types::Meta for Meta {
     }
     fn deinit(&mut self, f: Box<DeinitFn>) {
         self.deinit = Some(f)
+    }
+    fn handle(&mut self, typ: HandleType, f: Box<MsgHandlerFn>) {
+        self.handlers.push((typ, f))
     }
 }
 

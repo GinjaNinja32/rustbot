@@ -52,7 +52,7 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new<F: 'static + Fn(&Context, &str) -> Result<()> + Send + Sync>(f: F) -> Self {
+    pub fn new<F: 'static + Fn(&dyn Context, &str) -> Result<()> + Send + Sync>(f: F) -> Self {
         Self {
             function: Arc::new(f),
             req_perms: Perms::None,
@@ -72,11 +72,30 @@ impl Command {
     }
 }
 
+bitflags! {
+    pub struct HandleType: u64 {
+        const None      = 0x0000_0000;
+
+        const Command   = 0x0000_0001;
+        const PlainMsg  = 0x0000_0002;
+
+        const Public    = 0x0000_0004;
+        const Group     = 0x0000_0008;
+        const Private   = 0x0000_0010;
+
+        const All       = 0xFFFF_FFFF;
+    }
+}
+
 pub type DeinitFn = dyn FnMut(&dyn Bot) -> Result<()> + Send + Sync;
+
+pub type MsgHandlerFn = dyn Fn(&dyn Context, &str) -> Result<()> + Send + Sync;
 
 pub trait Meta {
     fn cmd(&mut self, name: &str, cmd: Command);
     fn deinit(&mut self, f: Box<DeinitFn>);
+
+    fn handle(&mut self, typ: HandleType, f: Box<MsgHandlerFn>);
 }
 
 pub trait Bot {
@@ -87,23 +106,73 @@ pub trait Bot {
     fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
     fn irc_send_raw(&self, &str, &str) -> Result<()>;
 
+    fn dis_unprocess_message(&self, &str, &str, &str) -> Result<String>;
     fn dis_send_message(&self, &str, &str, &str, &str, bool) -> Result<()>;
+
+    fn send_message(&self, &str, &str, Message) -> Result<()>;
 }
 
 pub trait Context {
+    fn config_id(&self) -> &str;
     fn bot(&self) -> &(dyn Bot + Sync);
     fn say(&self, &str) -> Result<()>;
     fn reply(&self, Message) -> Result<()>;
     fn perms(&self) -> Result<Perms>;
-    fn source_str(&self) -> String;
+    fn source(&self) -> &dyn Source;
+}
+
+pub trait Source {
+    fn user_string(&self) -> Cow<str>;
+    fn user_pretty(&self) -> Cow<str>;
+    fn channel_string(&self) -> Cow<str>;
+
+    fn get_discord_params(&self) -> Option<(Option<u64>, u64, u64)>;
+    fn get_irc_params(&self) -> Option<(Option<String>, String)>;
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Color {
-    None,
-    Red,
-    Yellow,
+    None = -1,
+    BrightWhite,
+    Black,
+    Blue,
     Green,
+    BrightRed,
+    Red,
+    Magenta,
+    Yellow,
+    BrightYellow,
+    BrightGreen,
+    Cyan,
+    BrightCyan,
+    BrightBlue,
+    BrightMagenta,
+    BrightBlack,
+    White,
+}
+
+impl From<u8> for Color {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => Color::BrightWhite,
+            1 => Color::Black,
+            2 => Color::Blue,
+            3 => Color::Green,
+            4 => Color::BrightRed,
+            5 => Color::Red,
+            6 => Color::Magenta,
+            7 => Color::Yellow,
+            8 => Color::BrightYellow,
+            9 => Color::BrightGreen,
+            10 => Color::Cyan,
+            11 => Color::BrightCyan,
+            12 => Color::BrightBlue,
+            13 => Color::BrightMagenta,
+            14 => Color::BrightBlack,
+            15 => Color::White,
+            _ => Color::None,
+        }
+    }
 }
 
 impl std::ops::Add<Format> for Color {
@@ -154,17 +223,19 @@ impl From<Color> for FormatColor {
     }
 }
 
+#[derive(Clone)]
 pub enum Message<'a> {
     Simple(String),
     Spans(Vec<Span<'a>>),
     Code(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Span<'a> {
     pub text: Cow<'a, str>,
     pub format: Format,
     pub color: Color,
+    pub bg: Color,
 }
 
 impl<'a> From<String> for Span<'a> {
@@ -195,6 +266,7 @@ macro_rules! span {
             text: $text.into(),
             format: fc.0,
             color: fc.1,
+            bg: Color::None,
         }
     }};
     ($fc:expr; $fmt:literal, $($arg:tt)*) => {{
@@ -203,6 +275,7 @@ macro_rules! span {
             text: format!($fmt, $($arg)*).into(),
             format: fc.0,
             color: fc.1,
+            bg: Color::None,
         }
     }};
     ($text: expr) => { $crate::span!($crate::types::Format::None; $text) };

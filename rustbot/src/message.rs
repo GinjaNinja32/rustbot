@@ -49,13 +49,16 @@ fn render_irc(spans: Vec<Span>) -> String {
                     }
                 }
                 _ => {
+                    let code = format!("\03{:02}", sp.color as u8);
+                    /*
                     let code = match sp.color {
                         Color::None => unreachable!(),
                         Color::Red => "\x0304",
                         Color::Yellow => "\x0308",
                         Color::Green => "\x0309",
                     };
-                    st.push_str(code);
+                    */
+                    st.push_str(&code);
                     if sp.format == fmt && sp.text.starts_with(',') {
                         st.push_str("\x02\x02");
                     }
