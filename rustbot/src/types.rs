@@ -195,6 +195,7 @@ bitflags! {
 impl std::ops::Add<Format> for Format {
     type Output = Format;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Format) -> Format {
         self | rhs
     }
@@ -206,6 +207,7 @@ pub struct FormatColor(pub Format, pub Color);
 impl std::ops::Add<Format> for FormatColor {
     type Output = FormatColor;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Format) -> FormatColor {
         FormatColor(self.0 | rhs, self.1)
     }
@@ -294,7 +296,11 @@ macro_rules! spans {
     ($($x:expr,)*) => ($crate::spans![$($x),*])
 }
 
-pub fn span_join<'a>(mut spans: Vec<impl MoveToVecSpan<'a>>, sep: impl CopyToVecSpan<'a> + 'a) -> Vec<Span<'a>> {
+pub fn span_join<'a, M, C>(mut spans: Vec<M>, sep: C) -> Vec<Span<'a>>
+where
+    M: MoveToVecSpan<'a>,
+    C: CopyToVecSpan<'a>,
+{
     let mut v = vec![];
     if spans.is_empty() {
         return v;

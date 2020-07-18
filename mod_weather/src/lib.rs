@@ -61,7 +61,7 @@ impl Module {
             "unknown location".to_string()
         };
 
-        let timestamp = NaiveDateTime::from_timestamp(data.dt, 0).format("%a %e %b %H:%M");
+        let timestamp = NaiveDateTime::from_timestamp(data.dt + data.timezone, 0).format("%a %e %b %H:%M");
         let sunrise = NaiveDateTime::from_timestamp(data.sys.sunrise + data.timezone, 0).format("%H:%M");
         let sunset = NaiveDateTime::from_timestamp(data.sys.sunset + data.timezone, 0).format("%H:%M");
 

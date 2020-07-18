@@ -180,7 +180,11 @@
 #define ENC_OUT(A) world.log << "[#A] => [enc(A)]"
 #define VAR_OUT(A) ENC_OUT(A)
 
+#if DM_BUILD < 1517
 #define chars(str) (splittext((str) + " ", regex("")) - "")
+#else
+#define chars(str) (splittext((str), ""))
+#endif
 
 #define DIGITS         "0123456789"
 #define ALPHA_LOWER    "abcdefghijklmnopqrstuvwxyz"

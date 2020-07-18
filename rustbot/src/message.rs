@@ -118,12 +118,12 @@ fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
         formats += "__";
     }
 
-    return Cow::Owned(format!(
+    Cow::Owned(format!(
         "\u{FEFF}{}{}{}\u{FEFF}",
         formats,
         s.text,
         formats.chars().rev().collect::<String>()
-    ));
+    ))
 }
 
 pub fn format_discord(m: Message) -> Result<String> {
