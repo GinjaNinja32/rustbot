@@ -405,6 +405,11 @@ impl DiceRoll {
 }
 
 named!(value<&str, Value>, sp!(alt!(
+    do_parse!(
+        sp!(tag!("-")) >>
+        v: number >>
+        (Value::Integer(-v))
+    ) |
     map!(number, |v| Value::Integer(v)) |
     map!(delimited!(tag!("("), expression, tag!(")")), |v| Value::Sub(Box::new(v))) |
     map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| Value::Slice(v)) |
@@ -454,11 +459,16 @@ pub enum AddSubOp {
 }
 impl AddSubOp {
     fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<EvaluatedValue, String> {
+        if let (IntSlice(l), IntSlice(r)) = (&left, &right) {
+            let mut l = l.clone();
+            l.extend_from_slice(&r);
+            return Ok(IntSlice(l));
+        }
         let l = left.as_i64()?;
         let r = right.as_i64()?;
         let result = match self {
-            AddSubOp::Add => l + r,
-            AddSubOp::Sub => l - r,
+            AddSubOp::Add => l.wrapping_add(r),
+            AddSubOp::Sub => l.wrapping_sub(r),
         };
         Ok(Integer(result))
     }
@@ -483,8 +493,8 @@ impl MulDivOp {
         let l = left.as_i64()?;
         let r = right.as_i64()?;
         let result = match self {
-            MulDivOp::Mul => l * r,
-            MulDivOp::Div => l / r,
+            MulDivOp::Mul => l.wrapping_mul(r),
+            MulDivOp::Div => l.wrapping_div(r),
         };
         Ok(Integer(result))
     }
