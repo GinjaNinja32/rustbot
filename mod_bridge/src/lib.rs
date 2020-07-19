@@ -68,8 +68,27 @@ fn do_bridge(ctx: &dyn Context, msg: &str) -> Result<()> {
     let msg = Message::Spans(if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
         spans! {user, " ", ctx.bot().dis_unprocess_message(conf, &format!("{}", g), &msg)?}
     } else if ctx.source().get_irc_params().is_some() {
-        let v = format::irc_parse(msg);
-        spans! {user, " ", v}
+        if msg.starts_with(1 as char) && msg.ends_with(1 as char) {
+            let ctcp = &msg[1..msg.len() - 1];
+            let parts = ctcp.splitn(2, ' ').collect::<Vec<_>>();
+            match parts[0] {
+                "ACTION" => {
+                    let v = format::irc_parse(parts[1]);
+                    spans! {
+                        span!(Format::Bold; "* {}", ctx.source().user_pretty()),
+                        " ",
+                        v
+                    }
+                }
+                _ => {
+                    println!("unexpected CTCP message {:?} {:?} in do_bridge", parts[0], parts[1]);
+                    return Ok(());
+                }
+            }
+        } else {
+            let v = format::irc_parse(msg);
+            spans! {user, " ", v}
+        }
     } else {
         spans! {user, " ", msg}
     });
