@@ -1,11 +1,27 @@
 use rustbot::prelude::*;
 use std::borrow::Cow;
+use std::io::{Read, Write};
+use std::process::{Command, Stdio};
 
 fn paste(text: &str) -> Result<String> {
-    let client = reqwest::Client::new();
-    let mut result = client.post("http://ix.io").form(&[("f:1", text)]).send()?;
+    let mut cmd = Command::new("./external/paste")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
 
-    let url = result.text()?;
+    {
+        let stdin = cmd.stdin.take();
+        write!(stdin.unwrap(), "{}", text)?;
+    }
+
+    cmd.wait().expect("failed to wait for paste");
+
+    let url = {
+        let stdout = cmd.stdout.take();
+        let mut url = "".to_string();
+        stdout.unwrap().read_to_string(&mut url)?;
+        url
+    };
 
     Ok(format!("[full message: {}]", url.trim()))
 }
