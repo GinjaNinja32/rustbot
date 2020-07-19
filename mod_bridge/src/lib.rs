@@ -67,7 +67,7 @@ fn do_bridge(ctx: &dyn Context, msg: &str) -> Result<()> {
 
     let msg = Message::Spans(if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
         spans! {user, " ", ctx.bot().dis_unprocess_message(conf, &format!("{}", g), &msg)?}
-    } else if let Some(_) = ctx.source().get_irc_params() {
+    } else if ctx.source().get_irc_params().is_some() {
         let v = format::irc_parse(msg);
         spans! {user, " ", v}
     } else {

@@ -519,7 +519,7 @@ impl types::Bot for Rustbot {
     }
 
     fn send_message(&self, config: &str, source: &str, msg: Message) -> Result<()> {
-        let parts: Vec<_> = source.split(":").collect();
+        let parts: Vec<_> = source.split(':').collect();
         if parts[0] == "irc" && parts.len() == 2 {
             let msg = message::format_irc(msg)?;
             for line in msg {

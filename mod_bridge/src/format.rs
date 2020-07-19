@@ -24,18 +24,18 @@ pub fn irc_parse(s: &str) -> Vec<Span> {
     while c.len() > i {
         match c[i] {
             IRC_COLOR | IRC_RESET | IRC_BOLD | IRC_UNDERLINE | IRC_ITALIC => {
-                if current.len() != 0 {
+                if !current.is_empty() {
                     spans.push(Span {
                         text: current.iter().collect::<String>().into(),
                         format,
                         color: fg,
-                        bg: bg,
+                        bg,
                     });
                     current.clear();
                 }
 
                 match c[i] {
-                    IRC_COLOR => match COLOR_REGEX.captures(&c[i + 1..].iter().map(|&v| v).collect::<String>()) {
+                    IRC_COLOR => match COLOR_REGEX.captures(&c[i + 1..].iter().copied().collect::<String>()) {
                         None => {
                             fg = Color::None;
                             bg = Color::None;
@@ -65,12 +65,12 @@ pub fn irc_parse(s: &str) -> Vec<Span> {
         i += 1;
     }
 
-    if current.len() != 0 {
+    if !current.is_empty() {
         spans.push(Span {
             text: current.iter().collect::<String>().into(),
             format,
             color: fg,
-            bg: bg,
+            bg,
         });
         current.clear();
     }
