@@ -621,7 +621,7 @@ pub fn start() -> Result<()> {
                     )?;
 
                     b.caches.write().insert(c.id.clone(), dis.cache_and_http.clone());
-                    println!("connect: discord");
+                    println!("connect: {}", c.id);
                     dis.start()?;
                     Ok(())
                 });
