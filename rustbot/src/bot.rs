@@ -138,7 +138,11 @@ impl Rustbot {
                 }
             }
             if let Some(title) = embed.title {
-                data.push(title);
+                if let Some(url) = embed.url {
+                    data.push(format!("{} <{}>", title, url));
+                } else {
+                    data.push(title);
+                }
             }
             if let Some(description) = embed.description {
                 data.append(&mut description.split('\n').map(str::to_string).collect());
