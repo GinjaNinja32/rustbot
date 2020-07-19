@@ -61,7 +61,7 @@ fn irc_parse_prefix(prefix: Option<String>) -> Option<context::Prefix> {
 impl Rustbot {
     fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
         if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
-            let mut typ = HandleType::None;
+            let mut typ = HandleType::PlainMsg;
 
             if channel == bot_name {
                 typ |= HandleType::Private
@@ -117,7 +117,52 @@ impl Rustbot {
             bot_name: "".to_string(),
         };
 
-        self.handle(ctx, typ, msg.content.as_str());
+        if !msg.content.is_empty() {
+            self.handle(ctx, HandleType::PlainMsg | typ, msg.content.as_str());
+        }
+        for att in msg.attachments {
+            self.handle(ctx, HandleType::Attachment | typ, &att.proxy_url);
+        }
+        for embed in msg.embeds {
+            if embed.title.is_none() && embed.description.is_none() {
+                // probably just a link, skip it
+                continue;
+            }
+
+            let mut data = vec![];
+            if let Some(author) = embed.author {
+                if let Some(url) = author.url {
+                    data.push(format!("{} <{}>", author.name, url));
+                } else {
+                    data.push(author.name);
+                }
+            }
+            if let Some(title) = embed.title {
+                data.push(title);
+            }
+            if let Some(description) = embed.description {
+                data.append(&mut description.split('\n').map(str::to_string).collect());
+            }
+
+            if data.is_empty() {
+                continue;
+            }
+
+            let mut spans = vec![];
+
+            if data.len() == 1 {
+                spans.push(format!("│ {}", data.remove(0)));
+            } else {
+                spans.push(format!("╽ {}", data.remove(0)));
+                let lastline = data.remove(data.len() - 1);
+                for line in data {
+                    spans.push(format!("┃ {}", line));
+                }
+                spans.push(format!("╿ {}", lastline));
+            }
+
+            self.handle(ctx, HandleType::Embed | typ, &spans.join("\n"));
+        }
     }
 
     fn handle(&self, ctx: &context::Context, typ: HandleType, message: &str) {
@@ -132,16 +177,6 @@ impl Rustbot {
     }
 
     fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
-        let cmdchars: String = {
-            let db = ctx.bot().sql().lock();
-            let chars = db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?;
-            if chars.is_empty() {
-                "".to_string()
-            } else {
-                chars.get(0).get(0)
-            }
-        };
-
         let enabled = {
             let db = ctx.bot().sql().lock();
             let mods: Vec<String> = db.query(
@@ -154,23 +189,34 @@ impl Rustbot {
             mods
         };
 
-        if message.starts_with(|c| cmdchars.contains(c)) {
-            // it's a command!
-            let prefix = message.chars().take(1).next().unwrap();
-            let parts: Vec<&str> = message[prefix.len_utf8()..].splitn(2, char::is_whitespace).collect();
-
-            let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
-
-            let res = self.commands.read().get(&cmd).cloned();
-            if let Some((m, f)) = res {
-                if enabled.contains(&m) {
-                    f.call(ctx, &args)?;
+        if typ.contains(HandleType::PlainMsg) {
+            let cmdchars: String = {
+                let db = ctx.bot().sql().lock();
+                let chars = db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?;
+                if chars.is_empty() {
+                    "".to_string()
+                } else {
+                    chars.get(0).get(0)
                 }
-            }
+            };
 
-            typ |= HandleType::Command;
-        } else {
-            typ |= HandleType::PlainMsg;
+            if message.starts_with(|c| cmdchars.contains(c)) {
+                // it's a command!
+                let prefix = message.chars().take(1).next().unwrap();
+                let parts: Vec<&str> = message[prefix.len_utf8()..].splitn(2, char::is_whitespace).collect();
+
+                let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
+
+                let res = self.commands.read().get(&cmd).cloned();
+                if let Some((m, f)) = res {
+                    if enabled.contains(&m) {
+                        f.call(ctx, &args)?;
+                    }
+                }
+
+                typ |= HandleType::Command;
+                typ &= !HandleType::PlainMsg;
+            }
         }
 
         for name in enabled {
@@ -178,7 +224,7 @@ impl Rustbot {
                 m.rent::<_, Result<()>>(|meta| {
                     for (ty, handler) in &meta.handlers {
                         if ty.contains(typ) {
-                            handler(ctx, message)?;
+                            handler(ctx, typ, message)?;
                         }
                     }
                     Ok(())

@@ -74,22 +74,24 @@ impl Command {
 
 bitflags! {
     pub struct HandleType: u64 {
-        const None      = 0x0000_0000;
+        const None       = 0x0000_0000;
 
-        const Command   = 0x0000_0001;
-        const PlainMsg  = 0x0000_0002;
+        const Command    = 0x0000_0001;
+        const PlainMsg   = 0x0000_0002;
+        const Attachment = 0x0000_0004;
+        const Embed      = 0x0000_0008;
 
-        const Public    = 0x0000_0004;
-        const Group     = 0x0000_0008;
-        const Private   = 0x0000_0010;
+        const Public     = 0x0000_0010;
+        const Group      = 0x0000_0020;
+        const Private    = 0x0000_0040;
 
-        const All       = 0xFFFF_FFFF;
+        const All        = 0xFFFF_FFFF;
     }
 }
 
 pub type DeinitFn = dyn FnMut(&dyn Bot) -> Result<()> + Send + Sync;
 
-pub type MsgHandlerFn = dyn Fn(&dyn Context, &str) -> Result<()> + Send + Sync;
+pub type MsgHandlerFn = dyn Fn(&dyn Context, HandleType, &str) -> Result<()> + Send + Sync;
 
 pub trait Meta {
     fn cmd(&mut self, name: &str, cmd: Command);
@@ -299,7 +301,7 @@ macro_rules! spans {
 pub fn span_join<'a, M, C>(mut spans: Vec<M>, sep: C) -> Vec<Span<'a>>
 where
     M: MoveToVecSpan<'a>,
-    C: CopyToVecSpan<'a>,
+    C: CloneToVecSpan<'a>,
 {
     let mut v = vec![];
     if spans.is_empty() {
@@ -311,11 +313,36 @@ where
     }
 
     for el in spans.drain(..) {
-        sep.copy_to_vec_span(&mut v);
+        sep.clone_to_vec_span(&mut v);
         el.move_to_vec_span(&mut v);
     }
 
     v
+}
+
+pub fn span_split<'a>(spans: Vec<Span<'a>>, sep: char) -> Vec<Vec<Span<'a>>> {
+    let mut ret = vec![];
+    let mut cur = vec![];
+
+    for span in spans {
+        let parts = span.text.split(sep).collect::<Vec<_>>();
+        cur.push(Span {
+            text: parts[0].to_string().into(),
+            ..span
+        });
+        for part in &parts[1..] {
+            ret.push(cur);
+            cur = vec![];
+            cur.push(Span {
+                text: (*part).to_string().into(),
+                ..span
+            });
+        }
+    }
+
+    ret.push(cur);
+
+    ret
 }
 
 mod private {
@@ -326,9 +353,9 @@ mod private {
     impl<'a> Sealed for Vec<Span<'a>> {}
     impl<'a, T: Into<Span<'a>>> Sealed for T {}
 
-    pub trait SealedCopy {}
+    pub trait SealedClone {}
 
-    impl<'a, T: Sealed + Copy> SealedCopy for T {}
+    impl<'a, T: Sealed + Clone> SealedClone for T {}
 }
 
 pub trait MoveToVecSpan<'a>: private::Sealed {
@@ -346,12 +373,12 @@ impl<'a, T: Into<Span<'a>>> MoveToVecSpan<'a> for T {
     }
 }
 
-pub trait CopyToVecSpan<'a>: private::SealedCopy {
-    fn copy_to_vec_span(&self, &mut Vec<Span<'a>>);
+pub trait CloneToVecSpan<'a>: private::SealedClone {
+    fn clone_to_vec_span(&self, &mut Vec<Span<'a>>);
 }
 
-impl<'a, T: MoveToVecSpan<'a> + Copy> CopyToVecSpan<'a> for T {
-    fn copy_to_vec_span(&self, v: &mut Vec<Span<'a>>) {
+impl<'a, T: MoveToVecSpan<'a> + Clone> CloneToVecSpan<'a> for T {
+    fn clone_to_vec_span(&self, v: &mut Vec<Span<'a>>) {
         self.clone().move_to_vec_span(v);
     }
 }
