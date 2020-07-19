@@ -4,7 +4,9 @@ extern crate regex;
 #[macro_use]
 extern crate rustbot;
 
+use regex::Regex;
 use rustbot::prelude::*;
+use std::borrow::Cow;
 
 mod format;
 #[cfg(tests)]
@@ -15,6 +17,10 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("bridge", Command::new(bridge).req_perms(Perms::Admin));
 
     meta.handle(HandleType::All, Box::new(do_bridge));
+}
+
+lazy_static! {
+    static ref ANTIPING_RE: Regex = Regex::new(r"\b[a-zA-Z0-9]").unwrap();
 }
 
 fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
@@ -63,41 +69,49 @@ fn do_bridge(ctx: &dyn Context, msg: &str) -> Result<()> {
         return Ok(());
     }
 
-    let user = span!(Format::Bold; "<{}>", ctx.source().user_pretty());
-
-    let msg = Message::Spans(if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
-        spans! {user, " ", ctx.bot().dis_unprocess_message(conf, &format!("{}", g), &msg)?}
-    } else if ctx.source().get_irc_params().is_some() {
-        if msg.starts_with(1 as char) && msg.ends_with(1 as char) {
-            let ctcp = &msg[1..msg.len() - 1];
-            let parts = ctcp.splitn(2, ' ').collect::<Vec<_>>();
-            match parts[0] {
-                "ACTION" => {
-                    let v = format::irc_parse(parts[1]);
-                    spans! {
-                        span!(Format::Bold; "* {}", ctx.source().user_pretty()),
-                        " ",
-                        v
+    let (user, spans): (&dyn for<'a> Fn(Cow<'a, str>) -> Span<'a>, Vec<Span>) =
+        if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
+            (
+                &|user| span!(Format::Bold; "<{}>", user),
+                spans! {ctx.bot().dis_unprocess_message(conf, &format!("{}", g), &msg)?},
+            )
+        } else if ctx.source().get_irc_params().is_some() {
+            if msg.starts_with(1 as char) && msg.ends_with(1 as char) {
+                let ctcp = &msg[1..msg.len() - 1];
+                let parts = ctcp.splitn(2, ' ').collect::<Vec<_>>();
+                match parts[0] {
+                    "ACTION" => {
+                        let v = format::irc_parse(parts[1]);
+                        (&|user| span!(Format::Bold; "* {}", user), v)
+                    }
+                    _ => {
+                        println!("unexpected CTCP message {:?} {:?} in do_bridge", parts[0], parts[1]);
+                        return Ok(());
                     }
                 }
-                _ => {
-                    println!("unexpected CTCP message {:?} {:?} in do_bridge", parts[0], parts[1]);
-                    return Ok(());
-                }
+            } else {
+                let v = format::irc_parse(msg);
+                (&|user| span!(Format::Bold; "<{}>", user), v)
             }
         } else {
-            let v = format::irc_parse(msg);
-            spans! {user, " ", v}
-        }
-    } else {
-        spans! {user, " ", msg}
-    });
+            (&|user| span!(Format::Bold; "<{}>", user), spans! {msg})
+        };
 
     for row in chans.iter() {
         let tconf = row.get::<_, String>(0);
         let tchan = row.get::<_, String>(1);
 
-        ctx.bot().send_message(&tconf, &tchan, msg.clone())?;
+        if tchan.starts_with("irc:") {
+            let user_pretty = ctx.source().user_pretty();
+
+            let user_pretty = ANTIPING_RE.replace_all(&user_pretty, "$0\u{feff}");
+
+            let msg = Message::Spans(spans! {user(user_pretty), " ", spans.clone()});
+            ctx.bot().send_message(&tconf, &tchan, msg)?;
+        } else {
+            let msg = Message::Spans(spans! {user(ctx.source().user_pretty()), " ", spans.clone()});
+            ctx.bot().send_message(&tconf, &tchan, msg)?;
+        }
     }
     Ok(())
 }
