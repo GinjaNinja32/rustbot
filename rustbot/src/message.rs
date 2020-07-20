@@ -108,6 +108,18 @@ pub fn format_irc(m: Message) -> Result<Vec<String>> {
     let msg = match m {
         Message::Simple(s) | Message::Code(s) => s,
         Message::Spans(s) => render_irc(s),
+        Message::Prefixed(p, s) => {
+            let p = render_irc(p);
+            let s = render_irc(s);
+
+            let (vec, link) = paste_max_lines(s, 3)?;
+
+            let mut vec = vec.iter().map(|line| p.clone() + line).collect::<Vec<_>>();
+            if let Some(link) = link {
+                vec.push(link);
+            }
+            return Ok(vec);
+        }
     };
 
     match paste_max_lines(msg, 3)? {
@@ -142,11 +154,26 @@ fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
     ))
 }
 
+fn render_dis_spans(s: Vec<Span>) -> String {
+    s.iter().map(render_dis).collect::<Vec<Cow<str>>>().join("")
+}
+
 pub fn format_discord(m: Message) -> Result<String> {
     let (msg, code) = match m {
         Message::Simple(s) => (s, false),
         Message::Code(s) => (s, true),
-        Message::Spans(s) => (s.iter().map(render_dis).collect::<Vec<Cow<str>>>().join(""), false),
+        Message::Spans(s) => (render_dis_spans(s), false),
+        Message::Prefixed(p, s) => {
+            let p = render_dis_spans(p);
+            let s = render_dis_spans(s);
+
+            let (res, url) = paste_max_lines(s, 11)?;
+            let mut res = res.iter().map(|line| p.clone() + line).collect::<Vec<_>>();
+            if let Some(u) = url {
+                res.push(u)
+            }
+            return Ok(res.join("\n"));
+        }
     };
 
     if code && !msg.contains('\n') {

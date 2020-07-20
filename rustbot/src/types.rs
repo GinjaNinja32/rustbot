@@ -231,6 +231,7 @@ impl From<Color> for FormatColor {
 pub enum Message<'a> {
     Simple(String),
     Spans(Vec<Span<'a>>),
+    Prefixed(Vec<Span<'a>>, Vec<Span<'a>>),
     Code(String),
 }
 

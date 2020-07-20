@@ -55,7 +55,7 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
     }
 }
 
-fn do_bridge(ctx: &dyn Context, typ: HandleType, msg: &str) -> Result<()> {
+fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
     let db = ctx.bot().sql().lock();
 
     let conf = ctx.config_id();
@@ -97,17 +97,6 @@ fn do_bridge(ctx: &dyn Context, typ: HandleType, msg: &str) -> Result<()> {
             (&|user| span!(Format::Bold; "<{}>", user), spans! {msg})
         };
 
-    let user_spans: &dyn for<'a> Fn(Span<'a>, Vec<Span<'a>>) -> Vec<Span<'a>> = if typ.contains(HandleType::Embed) {
-        &|user, spans| {
-            let lines = span_split(spans, '\n');
-            spans! {user.clone(), " ", span_join(lines, spans!{"\n", user, " "})}
-        }
-    } else {
-        &|user, spans| {
-            spans! {user, " ", spans}
-        }
-    };
-
     for row in chans.iter() {
         let tconf = row.get::<_, String>(0);
         let tchan = row.get::<_, String>(1);
@@ -117,10 +106,10 @@ fn do_bridge(ctx: &dyn Context, typ: HandleType, msg: &str) -> Result<()> {
 
             let user_pretty = ANTIPING_RE.replace_all(&user_pretty, "$0\u{feff}");
 
-            let msg = Message::Spans(user_spans(user(user_pretty), spans.clone()));
+            let msg = Message::Prefixed(spans! {user(user_pretty), " "}, spans.clone());
             ctx.bot().send_message(&tconf, &tchan, msg)?;
         } else {
-            let msg = Message::Spans(user_spans(user(ctx.source().user_pretty()), spans.clone()));
+            let msg = Message::Prefixed(spans! {user(ctx.source().user_pretty()), " "}, spans.clone());
             ctx.bot().send_message(&tconf, &tchan, msg)?;
         }
     }
