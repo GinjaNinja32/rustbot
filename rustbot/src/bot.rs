@@ -300,10 +300,17 @@ impl Rustbot {
         Ok((newcmd, args))
     }
 
-    fn dis_get_replacements(&self, guild: impl std::ops::Deref<Target = guild::Guild>) -> Vec<(String, String)> {
+    fn dis_get_replacements(
+        &self,
+        guild: impl std::ops::Deref<Target = guild::Guild>,
+        reverse: bool,
+    ) -> Vec<(String, String)> {
         let mut replacements = vec![];
         for (id, m) in &guild.members {
-            replacements.push((format!("@{}", m.user.read().name), format!("<@!{}>", id)));
+            replacements.push((format!("@{}", m.user.read().name), format!("<@{}>", id)));
+            if reverse {
+                replacements.push((format!("@{}", m.user.read().name), format!("<@!{}>", id)));
+            }
         }
 
         for (id, r) in &guild.roles {
@@ -481,7 +488,7 @@ impl types::Bot for Rustbot {
         .ok_or_else::<Box<dyn std::error::Error>, _>(|| "guild not found".into())?
         .read();
 
-        let mut replacements = self.dis_get_replacements(guildobj);
+        let mut replacements = self.dis_get_replacements(guildobj, true);
 
         replacements.sort_by(|l, r| {
             if l.1.len() != r.1.len() {
@@ -546,7 +553,7 @@ impl types::Bot for Rustbot {
         if process {
             let mut message = message.to_string();
 
-            let mut replacements = self.dis_get_replacements(guildobj);
+            let mut replacements = self.dis_get_replacements(guildobj, false);
 
             replacements.sort_by(|l, r| {
                 if l.0.len() != r.0.len() {
