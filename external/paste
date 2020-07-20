@@ -1,15 +1,3 @@
 #! /bin/sh
 
-# This script should accept the full message as input on stdin, and print a URL on stdout that contains the full message
-# This might be done by e.g. putting a file in the local filesystem in the correct location for a webserver to pick it up:
-
-#data="$(cat)"
-#md5="$(echo "$data" | md5sum | cut -d' ' -f1)"
-#echo "$data" > "/some/webserver/directory/$md5.txt"
-#echo "http://some.webserver/directory/$md5.txt"
-
-# or by posting it to an external paste service for low-volume/non-sensitive-content pastes
-
-#curl -sF 'f:1=<-' ix.io
-
-echo 'Pastes not configured, see external/paste'
+echo 'Pastes not configured, see external/README.md'
