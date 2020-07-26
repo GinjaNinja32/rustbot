@@ -2,6 +2,7 @@
 name = "mod_randomlist"
 version = "0.1.0"
 authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
+edition = "2018"
 
 [lib]
 crate_type = ["dylib"]

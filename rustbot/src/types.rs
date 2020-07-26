@@ -101,24 +101,24 @@ pub trait Meta {
 }
 
 pub trait Bot {
-    fn load_module(&self, &str) -> Result<()>;
-    fn drop_module(&self, &str) -> Result<()>;
+    fn load_module(&self, _: &str) -> Result<()>;
+    fn drop_module(&self, _: &str) -> Result<()>;
     fn sql(&self) -> &Mutex<Connection>;
 
-    fn irc_send_privmsg(&self, &str, &str, &str) -> Result<()>;
-    fn irc_send_raw(&self, &str, &str) -> Result<()>;
+    fn irc_send_privmsg(&self, _: &str, _: &str, _: &str) -> Result<()>;
+    fn irc_send_raw(&self, _: &str, _: &str) -> Result<()>;
 
-    fn dis_unprocess_message(&self, &str, &str, &str) -> Result<String>;
-    fn dis_send_message(&self, &str, &str, &str, &str, bool) -> Result<()>;
+    fn dis_unprocess_message(&self, _: &str, _: &str, _: &str) -> Result<String>;
+    fn dis_send_message(&self, _: &str, _: &str, _: &str, _: &str, _: bool) -> Result<()>;
 
-    fn send_message(&self, &str, &str, Message) -> Result<()>;
+    fn send_message(&self, _: &str, _: &str, _: Message) -> Result<()>;
 }
 
 pub trait Context {
     fn config_id(&self) -> &str;
     fn bot(&self) -> &(dyn Bot + Sync);
-    fn say(&self, &str) -> Result<()>;
-    fn reply(&self, Message) -> Result<()>;
+    fn say(&self, _: &str) -> Result<()>;
+    fn reply(&self, _: Message) -> Result<()>;
     fn perms(&self) -> Result<Perms>;
     fn source(&self) -> &dyn Source;
 }
@@ -261,7 +261,7 @@ impl<'a> From<Cow<'a, str>> for Span<'a> {
     }
 }
 
-use span;
+use crate::span;
 
 #[macro_export]
 macro_rules! span {
@@ -347,7 +347,7 @@ pub fn span_split<'a>(spans: Vec<Span<'a>>, sep: char) -> Vec<Vec<Span<'a>>> {
 }
 
 mod private {
-    use types::Span;
+    use crate::types::Span;
 
     pub trait Sealed {}
 
@@ -360,7 +360,7 @@ mod private {
 }
 
 pub trait MoveToVecSpan<'a>: private::Sealed {
-    fn move_to_vec_span(self, &mut Vec<Span<'a>>);
+    fn move_to_vec_span(self, _: &mut Vec<Span<'a>>);
 }
 
 impl<'a> MoveToVecSpan<'a> for Vec<Span<'a>> {
@@ -375,7 +375,7 @@ impl<'a, T: Into<Span<'a>>> MoveToVecSpan<'a> for T {
 }
 
 pub trait CloneToVecSpan<'a>: private::SealedClone {
-    fn clone_to_vec_span(&self, &mut Vec<Span<'a>>);
+    fn clone_to_vec_span(&self, _: &mut Vec<Span<'a>>);
 }
 
 impl<'a, T: MoveToVecSpan<'a> + Clone> CloneToVecSpan<'a> for T {

@@ -8,5 +8,5 @@ extern crate toml;
 pub mod types;
 
 pub mod prelude {
-    pub use types::*;
+    pub use crate::types::*;
 }

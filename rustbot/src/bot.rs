@@ -18,11 +18,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::config;
+use crate::context;
+use crate::context::Prefix;
+use crate::db;
 use crate::message;
-use config;
-use context;
-use context::Prefix;
-use db;
 use rustbot::prelude::*;
 use rustbot::types;
 
@@ -729,7 +729,7 @@ impl dis::EventHandler for DiscordBot {
     }
 }
 
-use bot::rent_module::Module;
+use crate::bot::rent_module::Module;
 rental! {
     #[allow(clippy::useless_transmute)]
     mod rent_module {

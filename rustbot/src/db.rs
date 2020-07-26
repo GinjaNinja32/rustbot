@@ -1,4 +1,4 @@
-use config;
+use crate::config;
 use migrant_lib::config::PostgresSettingsBuilder;
 use postgres::{Connection, TlsMode};
 
