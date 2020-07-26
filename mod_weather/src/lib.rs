@@ -26,8 +26,8 @@ impl Module {
         } else {
             vec![("q", args.to_string()), ("APPID", self.appid.clone())]
         };
-        let client = reqwest::Client::new();
-        let mut result = client
+        let client = reqwest::blocking::Client::new();
+        let result = client
             .get("https://api.openweathermap.org/data/2.5/weather")
             .query(&params)
             .send()?;
