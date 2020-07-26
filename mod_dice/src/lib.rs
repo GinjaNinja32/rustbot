@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate nom;
-extern crate rand;
-extern crate rustbot;
 
 mod dice;
 

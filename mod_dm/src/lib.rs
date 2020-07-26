@@ -1,5 +1,3 @@
-extern crate rustbot;
-
 use rustbot::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;

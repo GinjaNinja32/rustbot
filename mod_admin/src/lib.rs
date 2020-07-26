@@ -1,7 +1,3 @@
-extern crate postgres;
-extern crate rustbot;
-extern crate serde_json;
-
 use rustbot::prelude::*;
 
 mod bash;

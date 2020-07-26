@@ -1,5 +1,3 @@
-extern crate rustbot;
-
 use rustbot::prelude::*;
 
 #[no_mangle]

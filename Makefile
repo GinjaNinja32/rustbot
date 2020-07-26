@@ -4,28 +4,25 @@ define cargotoml
 name = "PACKAGE"
 version = "0.1.0"
 authors = ["$(shell git config user.name) <$(shell git config user.email)>"]
+edition = "2018"
 
 [lib]
 crate_type = ["dylib"]
 
 [dependencies]
-shared = { path = "../shared" }
+rustbot = { path = "../rustbot" }
 endef
 export cargotoml
 
 define librs
-extern crate shared;
-
-use shared::prelude::*;
+use rustbot::prelude::*;
 
 #[no_mangle]
-pub fn get_meta() -> Meta {
-    let mut meta = Meta::new();
-    meta.command("foo", foo);
-    meta
+pub fn get_meta(&mut dyn Meta) -> {
+    meta.cmd("foo", Command::new(foo));
 }
 
-fn foo(ctx: &Context, args: &str) -> Result<()> {
+fn foo(ctx: &dyn Context, args: &str) -> Result<()> {
 	Ok(())
 }
 endef

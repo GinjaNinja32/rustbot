@@ -1,5 +1,3 @@
-extern crate rustbot;
-
 use rustbot::prelude::*;
 use std::process::Command as ProcessCommand;
 use std::str;

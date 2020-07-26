@@ -1,11 +1,5 @@
-extern crate chrono;
 #[macro_use]
 extern crate lazy_static;
-extern crate reqwest;
-extern crate rustbot;
-extern crate serde;
-extern crate serde_json;
-extern crate toml;
 
 mod airport;
 
