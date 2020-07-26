@@ -1,10 +1,11 @@
 use rustbot::prelude::*;
 
-use postgres::types::FromSql;
+use postgres::types::{FromSql, Type};
+use std::error::Error;
 
 pub fn query(ctx: &dyn Context, args: &str) -> Result<()> {
     let result: String = {
-        let db = ctx.bot().sql().lock();
+        let mut db = ctx.bot().sql().lock();
         let r = db.prepare(args).and_then(|stmt| {
             if stmt.columns().is_empty() {
                 db.execute(args, &[]).map(|n| format!("{} row(s) changed", n))
@@ -15,14 +16,15 @@ pub fn query(ctx: &dyn Context, args: &str) -> Result<()> {
                     .map(|s| format!("{} {}", s.name(), s.type_().name()))
                     .collect();
                 let colstr = format!("({})", cols.join(", "));
-                let row_strs: Vec<String> = stmt
-                    .query(&[])?
+                let row_strs: Vec<String> = db
+                    .query(&stmt, &[])?
                     .iter()
                     .map(|row| {
                         let vals: Vec<String> = (0..row.len())
                             .map(|i| {
                                 let ty = row.columns()[i].type_();
-                                if row.get_bytes(i).is_none() {
+
+                                if row.try_get::<_, NullFinder>(i).is_ok() {
                                     "null".to_string()
                                 } else if i8::accepts(ty) {
                                     format!("{}", row.get::<_, i8>(i))
@@ -56,4 +58,20 @@ pub fn query(ctx: &dyn Context, args: &str) -> Result<()> {
         r?
     };
     ctx.say(result.as_str())
+}
+
+struct NullFinder;
+
+impl FromSql<'_> for NullFinder {
+    fn from_sql(_ty: &Type, _raw: &[u8]) -> std::result::Result<Self, Box<dyn Error + 'static + Sync + Send>> {
+        Err("not null".into())
+    }
+
+    fn from_sql_null(_ty: &Type) -> std::result::Result<Self, Box<dyn Error + 'static + Sync + Send>> {
+        Ok(Self)
+    }
+
+    fn accepts(_ty: &Type) -> bool {
+        true
+    }
 }

@@ -23,7 +23,7 @@ lazy_static! {
 }
 
 fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
-    let db = ctx.bot().sql().lock();
+    let mut db = ctx.bot().sql().lock();
     if args == "" {
         let key = db.query(
             "SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2",
@@ -33,7 +33,7 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
             return ctx.say("no bridge key found");
         }
 
-        ctx.say(&format!("bridge key: '{}'", key.get(0).get::<_, String>(0)))
+        ctx.say(&format!("bridge key: '{}'", key.get(0).unwrap().get::<_, String>(0)))
     } else if args == "none" {
         let n = db.execute(
             "DELETE FROM mod_bridge WHERE config_id = $1 AND channel_id = $2",
@@ -55,7 +55,7 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
 }
 
 fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
-    let db = ctx.bot().sql().lock();
+    let mut db = ctx.bot().sql().lock();
 
     let conf = ctx.config_id();
     let chan = ctx.source().channel_string();

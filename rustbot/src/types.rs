@@ -2,7 +2,6 @@
 
 use parking_lot::Mutex;
 use postgres::types::FromSql;
-use postgres::Connection;
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -32,7 +31,7 @@ impl std::fmt::Display for Perms {
     }
 }
 
-impl FromSql for Perms {
+impl FromSql<'_> for Perms {
     fn from_sql(
         ty: &postgres::types::Type,
         raw: &[u8],
@@ -103,7 +102,7 @@ pub trait Meta {
 pub trait Bot {
     fn load_module(&self, _: &str) -> Result<()>;
     fn drop_module(&self, _: &str) -> Result<()>;
-    fn sql(&self) -> &Mutex<Connection>;
+    fn sql(&self) -> &Mutex<postgres::Client>;
 
     fn irc_send_privmsg(&self, _: &str, _: &str, _: &str) -> Result<()>;
     fn irc_send_raw(&self, _: &str, _: &str) -> Result<()>;

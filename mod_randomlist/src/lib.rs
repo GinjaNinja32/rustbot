@@ -41,13 +41,13 @@ fn randomlist(what: &str, ctx: &dyn Context, args: &str) -> Result<()> {
         return ctx.say("Added.");
     }
 
-    let db = ctx.bot().sql().lock();
+    let mut db = ctx.bot().sql().lock();
     let rows = db
             .query("SELECT string FROM mod_randomlist WHERE category = $1 LIMIT 1 OFFSET FLOOR(RANDOM() * GREATEST((SELECT COUNT(*) FROM mod_randomlist WHERE category = $1), 1) )", &[&what])?;
     if rows.is_empty() {
         return ctx.say(&format!("I don't have anything to give you for '{}'", what));
     }
 
-    let s: String = rows.get(0).get(0);
+    let s: String = rows.get(0).unwrap().get(0);
     ctx.say(&s)
 }

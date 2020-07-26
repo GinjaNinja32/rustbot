@@ -4,7 +4,6 @@ use irc::client::prelude::Client;
 use libloading::Library;
 use parking_lot::{Mutex, RwLock};
 use postgres::types::FromSql;
-use postgres::Connection;
 use regex::Regex;
 use serde::Deserialize;
 use serenity::model::channel;
@@ -28,7 +27,7 @@ use rustbot::types;
 pub struct Rustbot {
     clients: RwLock<BTreeMap<String, Arc<ircx::IrcClient>>>,
     caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
-    db: Mutex<postgres::Connection>,
+    db: Mutex<postgres::Client>,
     modules: RwLock<BTreeMap<String, Module>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
 }
@@ -183,7 +182,7 @@ impl Rustbot {
 
     fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
         let enabled = {
-            let db = ctx.bot().sql().lock();
+            let mut db = ctx.bot().sql().lock();
             let mods: Vec<String> = db.query(
                     "SELECT name FROM modules JOIN enabled_modules USING (name) WHERE config_id = $1 AND modules.enabled",
                     &[&ctx.config],
@@ -196,12 +195,12 @@ impl Rustbot {
 
         if typ.contains(HandleType::PlainMsg) {
             let cmdchars: String = {
-                let db = ctx.bot().sql().lock();
+                let mut db = ctx.bot().sql().lock();
                 let chars = db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?;
                 if chars.is_empty() {
                     "".to_string()
                 } else {
-                    chars.get(0).get(0)
+                    chars.get(0).unwrap().get(0)
                 }
             };
 
@@ -242,7 +241,7 @@ impl Rustbot {
 
     fn resolve_alias(&self, cmd: &str, args: &str) -> Result<(String, String)> {
         let (newcmd, transforms): (String, ArgumentTransforms) = {
-            let db = self.sql().lock();
+            let mut db = self.sql().lock();
             let rows = db.query(
                 "WITH RECURSIVE resolve(depth, name, transform) AS (
                     VALUES (0, $1, null)
@@ -259,7 +258,7 @@ impl Rustbot {
             if rows.is_empty() {
                 return Err("failed to resolve alias: no result rows?".into());
             }
-            let row = rows.get(0);
+            let row = rows.get(0).unwrap();
 
             (row.get(0), row.get(1))
         };
@@ -375,7 +374,7 @@ impl std::ops::Deref for ArgumentTransforms {
     }
 }
 
-impl FromSql for ArgumentTransforms {
+impl FromSql<'_> for ArgumentTransforms {
     fn from_sql(
         ty: &postgres::types::Type,
         raw: &[u8],
@@ -393,7 +392,7 @@ impl types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
         if let Some(mut m) = self.modules.write().remove(name) {
             println!("drop module: {}", name);
-            let db = self.db.lock();
+            let mut db = self.db.lock();
             db
                 .execute(
                     "INSERT INTO modules (name, enabled) VALUES ($1, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
@@ -440,7 +439,7 @@ impl types::Bot for Rustbot {
         Ok(())
     }
 
-    fn sql(&self) -> &Mutex<Connection> {
+    fn sql(&self) -> &Mutex<postgres::Client> {
         &self.db
     }
 
@@ -605,7 +604,7 @@ pub fn start() -> Result<()> {
 
     {
         let modules: Vec<String> = {
-            let db = b.db.lock();
+            let mut db = b.db.lock();
             db.query("SELECT name FROM modules WHERE enabled = true", &[])?
                 .iter()
                 .map(|row| row.get(0))
@@ -618,7 +617,7 @@ pub fn start() -> Result<()> {
 
     for c in config.irc {
         let channels: Vec<String> = {
-            let db = b.db.lock();
+            let mut db = b.db.lock();
             let cid = c.id.clone();
             db.query("SELECT channel FROM irc_channels WHERE config_id = $1", &[&cid])?
                 .iter()

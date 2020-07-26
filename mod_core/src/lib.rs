@@ -86,7 +86,7 @@ fn set_enabled(ctx: &dyn Context, args: &str, target: bool) -> Result<()> {
     let config_id = a[0];
 
     for m in &a[1..] {
-        let db = ctx.bot().sql().lock();
+        let mut db = ctx.bot().sql().lock();
         if target {
             db.execute(
                 "INSERT INTO enabled_modules (config_id, name) VALUES ($1, $2)",

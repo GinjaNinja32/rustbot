@@ -1,12 +1,12 @@
 use crate::config;
 use migrant_lib::config::PostgresSettingsBuilder;
-use postgres::{Connection, TlsMode};
+use postgres::{Client, NoTls};
 
 use rustbot::prelude::*;
 
-pub fn open(pc: &config::Postgres) -> Result<Connection> {
+pub fn open(pc: &config::Postgres) -> Result<Client> {
     let conn_str = migrate(pc)?;
-    let conn = Connection::connect(conn_str, TlsMode::None)?;
+    let conn = Client::connect(&conn_str, NoTls)?;
     Ok(conn)
 }
 

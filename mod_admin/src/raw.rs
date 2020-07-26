@@ -38,7 +38,7 @@ pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
     }
 
     {
-        let db = ctx.bot().sql().lock();
+        let mut db = ctx.bot().sql().lock();
         db.execute(
             "INSERT INTO irc_channels (config_id, channel) VALUES ($1, $2) ON CONFLICT (config_id, channel) DO NOTHING",
             &[&args[0], &args[1]],
@@ -54,7 +54,7 @@ pub fn part(ctx: &dyn Context, args: &str) -> Result<()> {
         return Err("usage: part <config_id> <channel>".into());
     }
     {
-        let db = ctx.bot().sql().lock();
+        let mut db = ctx.bot().sql().lock();
         db.execute(
             "DELETE FROM irc_channels WHERE channel = $1 AND config_id = $2",
             &[&args[0], &args[1]],

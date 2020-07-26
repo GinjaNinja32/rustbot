@@ -84,7 +84,7 @@ impl<'a> types::Context for Context<'a> {
                         if v.is_empty() {
                             Perms::None
                         } else {
-                            v.get(0).get(0)
+                            v.get(0).unwrap().get(0)
                         }
                     }
                 };
@@ -103,7 +103,7 @@ impl<'a> types::Context for Context<'a> {
                         if v.is_empty() {
                             Perms::None
                         } else {
-                            v.get(0).get(0)
+                            v.get(0).unwrap().get(0)
                         }
                     }
                 };
