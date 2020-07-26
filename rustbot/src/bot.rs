@@ -123,49 +123,51 @@ impl Rustbot {
         for att in msg.attachments {
             self.handle(ctx, HandleType::Attachment | typ, &att.proxy_url);
         }
-        for embed in msg.embeds {
-            if embed.title.is_none() && embed.description.is_none() {
-                // probably just a link, skip it
-                continue;
-            }
+        if msg.content.is_empty() {
+            for embed in msg.embeds {
+                if embed.title.is_none() && embed.description.is_none() {
+                    // probably just a link, skip it
+                    continue;
+                }
 
-            let mut data = vec![];
-            if let Some(author) = embed.author {
-                if let Some(url) = author.url {
-                    data.push(format!("{} <{}>", author.name, url));
+                let mut data = vec![];
+                if let Some(author) = embed.author {
+                    if let Some(url) = author.url {
+                        data.push(format!("{} <{}>", author.name, url));
+                    } else {
+                        data.push(author.name);
+                    }
+                }
+                if let Some(title) = embed.title {
+                    if let Some(url) = embed.url {
+                        data.push(format!("{} <{}>", title, url));
+                    } else {
+                        data.push(title);
+                    }
+                }
+                if let Some(description) = embed.description {
+                    data.append(&mut description.split('\n').map(str::to_string).collect());
+                }
+
+                if data.is_empty() {
+                    continue;
+                }
+
+                let mut spans = vec![];
+
+                if data.len() == 1 {
+                    spans.push(format!("│ {}", data.remove(0)));
                 } else {
-                    data.push(author.name);
+                    spans.push(format!("╽ {}", data.remove(0)));
+                    let lastline = data.remove(data.len() - 1);
+                    for line in data {
+                        spans.push(format!("┃ {}", line));
+                    }
+                    spans.push(format!("╿ {}", lastline));
                 }
-            }
-            if let Some(title) = embed.title {
-                if let Some(url) = embed.url {
-                    data.push(format!("{} <{}>", title, url));
-                } else {
-                    data.push(title);
-                }
-            }
-            if let Some(description) = embed.description {
-                data.append(&mut description.split('\n').map(str::to_string).collect());
-            }
 
-            if data.is_empty() {
-                continue;
+                self.handle(ctx, HandleType::Embed | typ, &spans.join("\n"));
             }
-
-            let mut spans = vec![];
-
-            if data.len() == 1 {
-                spans.push(format!("│ {}", data.remove(0)));
-            } else {
-                spans.push(format!("╽ {}", data.remove(0)));
-                let lastline = data.remove(data.len() - 1);
-                for line in data {
-                    spans.push(format!("┃ {}", line));
-                }
-                spans.push(format!("╿ {}", lastline));
-            }
-
-            self.handle(ctx, HandleType::Embed | typ, &spans.join("\n"));
         }
     }
 
