@@ -1,6 +1,6 @@
-use irc::client::ext::ClientExt;
-use irc::client::prelude as ircx;
-use irc::client::prelude::Client;
+use ::irc::client::ext::ClientExt;
+use ::irc::client::prelude as irc;
+use ::irc::client::prelude::Client;
 use libloading::Library;
 use parking_lot::{Mutex, RwLock};
 use postgres::types::FromSql;
@@ -25,7 +25,7 @@ use rustbot::prelude::*;
 use rustbot::types;
 
 pub struct Rustbot {
-    clients: RwLock<BTreeMap<String, Arc<ircx::IrcClient>>>,
+    clients: RwLock<BTreeMap<String, Arc<irc::IrcClient>>>,
     caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
     db: Mutex<postgres::Client>,
     modules: RwLock<BTreeMap<String, Module>>,
@@ -57,8 +57,8 @@ fn irc_parse_prefix(prefix: Option<String>) -> Option<context::Prefix> {
 }
 
 impl Rustbot {
-    fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: ircx::Message) {
-        if let ircx::Command::PRIVMSG(channel, message) = irc_msg.command {
+    fn irc_incoming(&self, cfg: String, bot_name: &str, irc_msg: irc::Message) {
+        if let irc::Command::PRIVMSG(channel, message) = irc_msg.command {
             let mut typ = HandleType::PlainMsg;
 
             if channel == bot_name {
@@ -631,7 +631,7 @@ pub fn start() -> Result<()> {
             .spawn(move || {
                 run_with_backoff(&format!("IRC connection for {}", c.id), &|| {
                     let client = Arc::new(
-                        ircx::IrcClient::from_config(ircx::Config {
+                        irc::IrcClient::from_config(irc::Config {
                             nickname: Some(c.nick.clone()),
                             username: Some(c.user.clone()),
                             realname: Some(c.real.clone()),
@@ -644,9 +644,7 @@ pub fn start() -> Result<()> {
                         })
                         .map_err(from_irc)?,
                     );
-                    client
-                        .send_cap_req(&[ircx::Capability::MultiPrefix])
-                        .map_err(from_irc)?;
+                    client.send_cap_req(&[irc::Capability::MultiPrefix]).map_err(from_irc)?;
                     client.identify().map_err(from_irc)?;
                     b.clients.write().insert(c.id.clone(), client.clone());
                     println!("connect: {}", irc_descriptor(&c));
@@ -799,6 +797,6 @@ impl types::Meta for Meta {
     }
 }
 
-fn from_irc(e: irc::error::IrcError) -> Box<dyn std::error::Error> {
+fn from_irc(e: ::irc::error::IrcError) -> Box<dyn std::error::Error> {
     format!("{}", e).into()
 }
