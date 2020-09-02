@@ -42,63 +42,72 @@ fn render_irc(spans: Vec<Span>) -> String {
     let mut st = "".to_string();
 
     for sp in &spans {
-        if sp.color == col && sp.format == fmt {
-            st.push_str(&sp.text);
-            continue;
-        }
+        match sp {
+            Span::Text {
+                ref text,
+                format,
+                color,
+                ..
+            } => {
+                let format = *format;
+                let color = *color;
 
-        if sp.color == Color::None && sp.format == Format::None {
-            col = sp.color;
-            fmt = sp.format;
-            st.push('\x0F');
-            st.push_str(&sp.text);
-            continue;
-        }
-
-        if sp.color != col {
-            match sp.color {
-                Color::None => {
-                    if sp.format == fmt && sp.text.starts_with(|c| '0' <= c && c <= '9') {
-                        st.push_str("\x03\x02\x02")
-                    } else {
-                        st.push('\x03')
-                    }
+                if color == col && format == fmt {
+                    st.push_str(&text);
+                    continue;
                 }
-                _ => {
-                    let code = format!("\03{:02}", sp.color as u8);
-                    /*
-                    let code = match sp.color {
-                        Color::None => unreachable!(),
-                        Color::Red => "\x0304",
-                        Color::Yellow => "\x0308",
-                        Color::Green => "\x0309",
-                    };
-                    */
-                    st.push_str(&code);
-                    if sp.format == fmt && sp.text.starts_with(',') {
-                        st.push_str("\x02\x02");
-                    }
+
+                if color == Color::None && format == Format::None {
+                    col = color;
+                    fmt = format;
+                    st.push('\x0F');
+                    st.push_str(&text);
+                    continue;
                 }
+
+                if color != col {
+                    match color {
+                        Color::None => {
+                            if format == fmt && text.starts_with(|c| '0' <= c && c <= '9') {
+                                st.push_str("\x03\x02\x02")
+                            } else {
+                                st.push('\x03')
+                            }
+                        }
+                        _ => {
+                            let code = format!("\03{:02}", color as u8);
+                            st.push_str(&code);
+                            if format == fmt && text.starts_with(',') {
+                                st.push_str("\x02\x02");
+                            }
+                        }
+                    }
+                    col = color;
+                }
+
+                if format != fmt {
+                    let toggle = format ^ fmt;
+                    if toggle.contains(Format::Bold) {
+                        st.push('\x02');
+                    }
+                    if toggle.contains(Format::Italic) {
+                        st.push('\x1D');
+                    }
+                    if toggle.contains(Format::Underline) {
+                        st.push('\x1F');
+                    }
+
+                    fmt = format;
+                }
+
+                st.push_str(&text);
             }
-            col = sp.color;
+            Span::DiscordEmoji(name, _) => {
+                st.push(':');
+                st.push_str(name);
+                st.push(':');
+            }
         }
-
-        if sp.format != fmt {
-            let toggle = sp.format ^ fmt;
-            if toggle.contains(Format::Bold) {
-                st.push('\x02');
-            }
-            if toggle.contains(Format::Italic) {
-                st.push('\x1D');
-            }
-            if toggle.contains(Format::Underline) {
-                st.push('\x1F');
-            }
-
-            fmt = sp.format;
-        }
-
-        st.push_str(&sp.text);
     }
 
     st
@@ -132,26 +141,31 @@ pub fn format_irc(m: Message) -> Result<Vec<String>> {
 }
 
 fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
-    if s.format == Format::None {
-        return s.text.clone();
-    }
-    let mut formats = "".to_string();
-    if s.format.contains(Format::Italic) {
-        formats += "*";
-    }
-    if s.format.contains(Format::Bold) {
-        formats += "**";
-    }
-    if s.format.contains(Format::Underline) {
-        formats += "__";
-    }
+    match s {
+        Span::Text { text, format, .. } => {
+            if *format == Format::None {
+                return text.clone();
+            }
+            let mut formats = "".to_string();
+            if format.contains(Format::Italic) {
+                formats += "*";
+            }
+            if format.contains(Format::Bold) {
+                formats += "**";
+            }
+            if format.contains(Format::Underline) {
+                formats += "__";
+            }
 
-    Cow::Owned(format!(
-        "\u{FEFF}{}{}{}\u{FEFF}",
-        formats,
-        s.text,
-        formats.chars().rev().collect::<String>()
-    ))
+            Cow::Owned(format!(
+                "\u{FEFF}{}{}{}\u{FEFF}",
+                formats,
+                text,
+                formats.chars().rev().collect::<String>()
+            ))
+        }
+        Span::DiscordEmoji(name, id) => Cow::Owned(format!("<:{}:{}>", name, id)),
+    }
 }
 
 fn render_dis_spans(s: Vec<Span>) -> String {

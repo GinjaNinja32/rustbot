@@ -25,7 +25,7 @@ pub fn irc_parse(s: &str) -> Vec<Span> {
         match c[i] {
             IRC_COLOR | IRC_RESET | IRC_BOLD | IRC_UNDERLINE | IRC_ITALIC => {
                 if !current.is_empty() {
-                    spans.push(Span {
+                    spans.push(Span::Text {
                         text: current.iter().collect::<String>().into(),
                         format,
                         color: fg,
@@ -66,7 +66,7 @@ pub fn irc_parse(s: &str) -> Vec<Span> {
     }
 
     if !current.is_empty() {
-        spans.push(Span {
+        spans.push(Span::Text {
             text: current.iter().collect::<String>().into(),
             format,
             color: fg,

@@ -235,11 +235,14 @@ pub enum Message<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Span<'a> {
-    pub text: Cow<'a, str>,
-    pub format: Format,
-    pub color: Color,
-    pub bg: Color,
+pub enum Span<'a> {
+    Text {
+        text: Cow<'a, str>,
+        format: Format,
+        color: Color,
+        bg: Color,
+    },
+    DiscordEmoji(Cow<'a, str>, u64),
 }
 
 impl<'a> From<String> for Span<'a> {
@@ -266,20 +269,20 @@ use crate::span;
 macro_rules! span {
     ($fc:expr; $text:expr) => {{
         let fc: $crate::types::FormatColor = $fc.into();
-        $crate::types::Span {
+        $crate::types::Span::Text {
             text: $text.into(),
             format: fc.0,
             color: fc.1,
-            bg: Color::None,
+            bg: $crate::types::Color::None,
         }
     }};
     ($fc:expr; $fmt:literal, $($arg:tt)*) => {{
         let fc: $crate::types::FormatColor = $fc.into();
-        $crate::types::Span{
+        $crate::types::Span::Text {
             text: format!($fmt, $($arg)*).into(),
             format: fc.0,
             color: fc.1,
-            bg: Color::None,
+            bg: $crate::types::Color::None,
         }
     }};
     ($text: expr) => { $crate::span!($crate::types::Format::None; $text) };
@@ -325,18 +328,34 @@ pub fn span_split<'a>(spans: Vec<Span<'a>>, sep: char) -> Vec<Vec<Span<'a>>> {
     let mut cur = vec![];
 
     for span in spans {
-        let parts = span.text.split(sep).collect::<Vec<_>>();
-        cur.push(Span {
-            text: parts[0].to_string().into(),
-            ..span
-        });
-        for part in &parts[1..] {
-            ret.push(cur);
-            cur = vec![];
-            cur.push(Span {
-                text: (*part).to_string().into(),
-                ..span
-            });
+        match span {
+            Span::Text {
+                text,
+                format,
+                color,
+                bg,
+            } => {
+                let parts = text.split(sep).collect::<Vec<_>>();
+                cur.push(Span::Text {
+                    text: parts[0].to_string().into(),
+                    format,
+                    color,
+                    bg,
+                });
+                for part in &parts[1..] {
+                    ret.push(cur);
+                    cur = vec![];
+                    cur.push(Span::Text {
+                        text: (*part).to_string().into(),
+                        format,
+                        color,
+                        bg,
+                    });
+                }
+            }
+            Span::DiscordEmoji { .. } => {
+                cur.push(span);
+            }
         }
     }
 
