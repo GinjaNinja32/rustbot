@@ -18,7 +18,7 @@ define librs
 use rustbot::prelude::*;
 
 #[no_mangle]
-pub fn get_meta(&mut dyn Meta) -> {
+pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("foo", Command::new(foo));
 }
 
