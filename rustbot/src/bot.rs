@@ -564,7 +564,13 @@ impl types::Bot for Rustbot {
             });
 
             for (find, replace) in replacements {
-                message = message.replace(&find, &replace);
+                // TODO make this not compile new regexes for each user on every processed message
+                let re = Regex::new(&format!(r"{}($|[\pP\pZ])", regex::escape(&find)))?;
+                message = re
+                    .replace(&message, |captures: &regex::Captures| {
+                        format!("{}{}", replace, captures.get(1).unwrap().as_str())
+                    })
+                    .to_string();
             }
 
             chanid.say(Arc::clone(&cache_and_http.http), message)?;
