@@ -1,15 +1,17 @@
 extern crate irc;
+#[macro_use]
+extern crate lazy_static;
 extern crate libloading;
 extern crate migrant_lib;
 extern crate parking_lot;
 extern crate postgres;
 extern crate regex;
+#[macro_use]
+extern crate rental;
 extern crate rustbot;
 extern crate serde;
 extern crate serde_json;
 extern crate serenity;
-#[macro_use]
-extern crate rental;
 
 mod bot;
 mod config;

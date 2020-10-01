@@ -10,6 +10,7 @@ use serenity::model::channel;
 use serenity::model::guild;
 use serenity::model::id::*;
 use serenity::prelude as dis;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::str;
 use std::sync::Arc;
@@ -563,14 +564,27 @@ impl types::Bot for Rustbot {
                 l.0.cmp(&r.0)
             });
 
-            for (find, replace) in replacements {
-                // TODO make this not compile new regexes for each user on every processed message
-                let re = Regex::new(&format!(r"{}($|[\pP\pZ])", regex::escape(&find)))?;
-                message = re
-                    .replace(&message, |captures: &regex::Captures| {
+            {
+                lazy_static! {
+                    static ref REGEX_CACHE: Mutex<BTreeMap<String, Regex>> = Mutex::new(BTreeMap::new());
+                }
+
+                let mut cache = REGEX_CACHE.lock();
+
+                for (find, replace) in replacements {
+                    let re = if let Some(re) = cache.get(&find) {
+                        re
+                    } else {
+                        let re = Regex::new(&format!(r"{}($|[\pP\pZ])", regex::escape(&find)))?;
+                        cache.entry(find).or_insert(re)
+                    };
+
+                    if let Cow::Owned(s) = re.replace_all(&message, |captures: &regex::Captures| {
                         format!("{}{}", replace, captures.get(1).unwrap().as_str())
-                    })
-                    .to_string();
+                    }) {
+                        message = s.to_string();
+                    }
+                }
             }
 
             chanid.say(Arc::clone(&cache_and_http.http), message)?;
