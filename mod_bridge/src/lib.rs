@@ -33,7 +33,23 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
             return ctx.say("no bridge key found");
         }
 
-        ctx.say(&format!("bridge key: '{}'", key.get(0).unwrap().get::<_, String>(0)))
+        let conf = ctx.config_id();
+        let chan = ctx.source().channel_string();
+
+        let chans = db.query(
+            "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
+            &[&conf, &chan],
+        )?;
+        let chans_str = chans
+            .iter()
+            .map(|row| format!("{}:{}", row.get::<_, String>(0), row.get::<_, String>(1)))
+            .collect::<Vec<_>>();
+
+        ctx.say(&format!(
+            "bridge key '{}', bridged channels: {:?}",
+            key.get(0).unwrap().get::<_, String>(0),
+            chans_str
+        ))
     } else if args == "none" {
         let n = db.execute(
             "DELETE FROM mod_bridge WHERE config_id = $1 AND channel_id = $2",
