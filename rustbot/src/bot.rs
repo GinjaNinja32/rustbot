@@ -1,6 +1,7 @@
 use ::irc::client::ext::ClientExt;
 use ::irc::client::prelude as irc;
 use ::irc::client::prelude::Client;
+use futures::channel::oneshot::{self, Receiver, Sender};
 use libloading::Library;
 use parking_lot::{Mutex, RwLock};
 use postgres::types::FromSql;
@@ -404,8 +405,14 @@ impl types::Bot for Rustbot {
                 for command in &meta.commands {
                     commands.remove(command.0);
                 }
+                for chan in meta.unload_channels.drain(..) {
+                    chan.send(()).unwrap_or(()); // Err() here means the remote end was dropped before we got here
+                }
                 if let Some(f) = &mut meta.deinit {
                     f(self)?;
+                }
+                for thread in meta.threads.drain(..) {
+                    thread.join().map_err(|e| format!("{:?}", e))?;
                 }
                 Ok(())
             })?;
@@ -793,6 +800,8 @@ pub struct Meta {
     commands: BTreeMap<String, Command>,
     deinit: Option<Box<DeinitFn>>,
     handlers: Vec<(HandleType, Box<MsgHandlerFn>)>,
+    unload_channels: Vec<Sender<()>>,
+    threads: Vec<std::thread::JoinHandle<()>>,
 }
 
 impl Meta {
@@ -801,6 +810,8 @@ impl Meta {
             commands: BTreeMap::new(),
             deinit: None,
             handlers: Vec::new(),
+            unload_channels: Vec::new(),
+            threads: Vec::new(),
         }
     }
 }
@@ -814,6 +825,15 @@ impl types::Meta for Meta {
     }
     fn handle(&mut self, typ: HandleType, f: Box<MsgHandlerFn>) {
         self.handlers.push((typ, f))
+    }
+    fn on_unload_channel(&mut self) -> Receiver<()> {
+        let (send, recv) = oneshot::channel();
+
+        self.unload_channels.push(send);
+        recv
+    }
+    fn thread(&mut self, f: Box<ThreadFn>) {
+        self.threads.push(std::thread::spawn(f));
     }
 }
 

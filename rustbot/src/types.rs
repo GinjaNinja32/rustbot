@@ -92,11 +92,17 @@ pub type DeinitFn = dyn FnMut(&dyn Bot) -> Result<()> + Send + Sync;
 
 pub type MsgHandlerFn = dyn Fn(&dyn Context, HandleType, &str) -> Result<()> + Send + Sync;
 
+pub type ThreadFn = dyn FnOnce() + 'static + Send;
+
 pub trait Meta {
     fn cmd(&mut self, name: &str, cmd: Command);
     fn deinit(&mut self, f: Box<DeinitFn>);
 
     fn handle(&mut self, typ: HandleType, f: Box<MsgHandlerFn>);
+
+    fn on_unload_channel(&mut self) -> futures::channel::oneshot::Receiver<()>;
+
+    fn thread(&mut self, f: Box<ThreadFn>);
 }
 
 pub trait Bot {
