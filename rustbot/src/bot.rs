@@ -453,6 +453,7 @@ impl types::Bot for Rustbot {
 
     fn irc_send_privmsg(&self, cfg: &str, channel: &str, message: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
+            let message = if message.len() > 490 { &message[..490] } else { message };
             client.send_privmsg(channel, message).map_err(from_irc)?;
             Ok(())
         } else {
@@ -462,6 +463,7 @@ impl types::Bot for Rustbot {
 
     fn irc_send_raw(&self, cfg: &str, line: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
+            let line = if line.len() > 510 { &line[..510] } else { line };
             client.send(line).map_err(from_irc)?;
             Ok(())
         } else {
