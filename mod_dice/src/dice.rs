@@ -413,14 +413,21 @@ impl DiceRoll {
                     }
                     None => (vec![], 1),
                 };
+
+                if c < 0 {
+                    return Err(format!("tried to roll {} dice", c));
+                }
+
                 let (ss, s) = match sv {
                     Some(v) => {
                         let (vs, vv) = v.eval(limit)?;
                         let opts: DiceOptions = match vv {
-                            Integer(i) => DiceOptions::Range(1, i),
+                            Integer(i) if i >= 1 => DiceOptions::Range(1, i),
+                            Integer(0) => return Err("cannot roll a d0".to_string()),
+                            Integer(i) => return Err(format!("cannot roll a d({})", i)),
                             IntSlice(s) => DiceOptions::Vector(s),
                             Bool(b) => return Err(format!("cannot roll a d{}", b)),
-                            BoolSlice(b) => return Err(format!("cannot roll a d{:?}", b)),
+                            BoolSlice(_) => return Err("cannot roll a d[list of bool]".to_string()),
                         };
                         (vs, opts)
                     }
