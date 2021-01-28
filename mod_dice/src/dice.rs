@@ -50,10 +50,6 @@ impl EvaluationLimiter {
             None => return Err("overflow calculating entropy".to_string()),
         };
 
-        println!(
-            "trying to use {}x {} options = {} bits, out of {} bits remaining",
-            count, options, entropy, self.entropy
-        );
         if self.entropy < entropy {
             Err("roll too complex".to_string())
         } else {
