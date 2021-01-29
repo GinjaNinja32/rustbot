@@ -1,16 +1,14 @@
 use rand::seq::SliceRandom;
-use rand::thread_rng;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::borrow::Cow;
-use std::fmt;
-use std::fmt::Display;
-use std::iter;
+use std::fmt::{self, Display};
 
 use rustbot::prelude::{span_join, Color, Format, Span};
 use rustbot::{span, spans};
 
-// enums
-use self::EvaluatedValue::*;
+use super::limits::Limiter;
+use super::value::Value;
+use super::Evaluable;
 
 // space eater
 named!(space<&str,&str>, eat_separator!(" \t"));
@@ -30,101 +28,7 @@ macro_rules! sp (
   )
 );
 
-pub struct EvaluationLimiter {
-    entropy: u64,
-}
-
-impl EvaluationLimiter {
-    pub fn new(entropy: u64) -> Self {
-        Self { entropy }
-    }
-
-    fn use_entropy(&mut self, count: u64, options: u64) -> Result<(), String> {
-        let entropy = match options
-            .checked_next_power_of_two()
-            .map(|v| v.trailing_zeros())
-            .map(|v| count.checked_mul(v as u64))
-            .flatten()
-        {
-            Some(v) => v,
-            None => return Err("overflow calculating entropy".to_string()),
-        };
-
-        if self.entropy < entropy {
-            Err("roll too complex".to_string())
-        } else {
-            self.entropy -= entropy;
-            Ok(())
-        }
-    }
-}
-
-pub fn parse(input: &str) -> Result<Expression, String> {
-    fullexpr(&format!("{}\n", input))
-        .map(|(_, c)| c)
-        .map_err(|e| format!("{:?}", e))
-}
-
-pub fn eval(expr: &Expression, mut limit: EvaluationLimiter) -> Result<Vec<Span>, String> {
-    let (s, v) = expr.eval(&mut limit)?;
-    Ok(spans!(v.to_string(), ": ", s))
-}
-
-trait Evaluable {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String>;
-}
-enum EvaluatedValue {
-    Integer(i64),
-    IntSlice(Vec<i64>),
-    Bool(bool),
-    BoolSlice(Vec<bool>),
-}
-impl Display for EvaluatedValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            Integer(i) => write!(f, "{}", i),
-            IntSlice(s) => {
-                if s.len() <= 10 {
-                    let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
-                    write!(f, "[{}]", strs.join(", "))
-                } else {
-                    write!(f, "[{} ints, total {}]", s.len(), s.iter().sum::<i64>())
-                }
-            }
-            Bool(b) => write!(f, "{}", b),
-            BoolSlice(s) => {
-                if s.len() <= 10 {
-                    let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
-                    write!(f, "[{}]", strs.join(", "))
-                } else {
-                    write!(f, "[{} bools, {} true]", s.len(), s.iter().filter(|v| **v).count())
-                }
-            }
-        }
-    }
-}
-
-impl EvaluatedValue {
-    fn as_i64(&self) -> Result<i64, String> {
-        match self {
-            Integer(i) => Ok(*i),
-            IntSlice(s) => Ok(s.iter().sum()),
-            Bool(true) => Ok(1),
-            Bool(false) => Ok(0),
-            BoolSlice(s) => Ok(s.iter().filter(|&v| *v).count() as i64),
-        }
-    }
-    fn as_int_slice(&self) -> Result<Vec<i64>, String> {
-        match self {
-            Integer(i) => Err(format!("cannot convert {} to slice", i)),
-            IntSlice(s) => Ok(s.to_vec()),
-            Bool(b) => Err(format!("cannot convert {} to slice", b)),
-            BoolSlice(s) => Ok(s.iter().map(|&v| if v { 1 } else { 0 }).collect()),
-        }
-    }
-}
-
-named!(fullexpr<&str, Expression>,
+named!(pub fullexpr<&str, Expression>,
     terminated!(expression, tag!("\n"))
 );
 
@@ -136,7 +40,7 @@ pub struct Expression {
     pub expr: Repeat, // ...
 }
 impl Evaluable for Expression {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         self.expr.eval(limit)
     }
 }
@@ -156,20 +60,20 @@ pub struct Repeat {
     pub term: Comparison,    // ...
 }
 impl Evaluable for Repeat {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         match self.repeat {
             None => self.term.eval(limit),
             Some(n) => {
                 let (strs, vals) = (0..n)
                     .map(|_| {
                         let (s, v) = self.term.eval(limit)?;
-                        Ok((s, v.as_i64()?))
+                        Ok((s, v.to_int()?))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
                     .drain(..)
                     .unzip();
 
-                Ok((span_join(strs, ", "), IntSlice(vals)))
+                Ok((span_join(strs, ", "), Value::IntSlice(vals)))
             }
         }
     }
@@ -186,7 +90,7 @@ pub struct Comparison {
     pub right: Option<(CompareOp, AddSub)>, // ( operator ... )?
 }
 impl Evaluable for Comparison {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         let l = self.left.eval(limit)?;
         match &self.right {
             None => Ok(l),
@@ -212,7 +116,7 @@ pub struct AddSub {
     pub right: Vec<(AddSubOp, MulDiv)>, // ( operator ... )*
 }
 impl Evaluable for AddSub {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         let (s, mut l) = self.left.eval(limit)?;
         let mut ss = s;
         for elem in &self.right {
@@ -237,7 +141,7 @@ pub struct MulDiv {
     pub right: Vec<(MulDivOp, Sum)>, // ( operator ... )*
 }
 impl Evaluable for MulDiv {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         let (s, mut l) = self.left.eval(limit)?;
         let mut ss = s;
         for elem in &self.right {
@@ -262,10 +166,10 @@ pub struct Sum {
     pub term: DiceMod, // ...
 }
 impl Evaluable for Sum {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         let (s, v) = self.term.eval(limit)?;
         if self.is_sum {
-            Ok((spans!("s", s), Integer(v.as_i64()?)))
+            Ok((spans!("s", s), Value::Int(v.to_int()?)))
         } else {
             Ok((s, v))
         }
@@ -279,11 +183,11 @@ named!(dicemod<&str, DiceMod>, sp!(do_parse!(
 )));
 #[derive(Debug)]
 pub struct DiceMod {
-    pub roll: DiceRoll,             // ...
-    pub op: Option<(ModOp, Value)>, // ( operator ... )?
+    pub roll: DiceRoll,                // ...
+    pub op: Option<(ModOp, AstValue)>, // ( operator ... )?
 }
 impl Evaluable for DiceMod {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         match &self.op {
             None => self.roll.eval(limit),
             Some((op, r)) => match self.roll {
@@ -338,15 +242,15 @@ named!(diceroll<&str, DiceRoll>, sp!(alt!(
 )));
 #[derive(Debug)]
 pub enum DiceRoll {
-    NoRoll(Value), // ...
+    NoRoll(AstValue), // ...
     Roll {
-        count: Option<Value>,     // ( ... )? "d"
-        sides: Option<Value>,     // ( ... )?
+        count: Option<AstValue>,  // ( ... )? "d"
+        sides: Option<AstValue>,  // ( ... )?
         explode: Option<Explode>, // ( "!" ( integer )? )?
     },
 }
 impl Evaluable for DiceRoll {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         let (s, r) = self._eval(limit)?;
         match self {
             DiceRoll::NoRoll(_) => Ok((s, r)),
@@ -393,7 +297,7 @@ impl DiceOptions {
 }
 
 impl DiceRoll {
-    fn _eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn _eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         match self {
             DiceRoll::NoRoll(v) => v.eval(limit),
             DiceRoll::Roll {
@@ -404,7 +308,7 @@ impl DiceRoll {
                 let (cs, c) = match cv {
                     Some(v) => {
                         let (vs, vv) = v.eval(limit)?;
-                        let count = vv.as_i64()?;
+                        let count = vv.to_int()?;
                         (vs, count)
                     }
                     None => (vec![], 1),
@@ -418,12 +322,12 @@ impl DiceRoll {
                     Some(v) => {
                         let (vs, vv) = v.eval(limit)?;
                         let opts: DiceOptions = match vv {
-                            Integer(i) if i >= 1 => DiceOptions::Range(1, i),
-                            Integer(0) => return Err("cannot roll a d0".to_string()),
-                            Integer(i) => return Err(format!("cannot roll a d({})", i)),
-                            IntSlice(s) => DiceOptions::Vector(s),
-                            Bool(b) => return Err(format!("cannot roll a d{}", b)),
-                            BoolSlice(_) => return Err("cannot roll a d[list of bool]".to_string()),
+                            Value::Int(i) if i >= 1 => DiceOptions::Range(1, i),
+                            Value::Int(0) => return Err("cannot roll a d0".to_string()),
+                            Value::Int(i) => return Err(format!("cannot roll a d({})", i)),
+                            Value::IntSlice(s) => DiceOptions::Vector(s),
+                            Value::Bool(b) => return Err(format!("cannot roll a d{}", b)),
+                            Value::BoolSlice(_) => return Err("cannot roll a d[list of bool]".to_string()),
                         };
                         (vs, opts)
                     }
@@ -453,7 +357,7 @@ impl DiceRoll {
 
                 let mut rng = thread_rng();
                 let mut entropy_err = None;
-                let results = iter::repeat_with(|| s.roll(&mut rng))
+                let results = std::iter::repeat_with(|| s.roll(&mut rng))
                     .take_while(|&roll| {
                         if n == 0 {
                             return false;
@@ -484,55 +388,55 @@ impl DiceRoll {
                     None => "".into(),
                     Some(exp) => format!("{}", exp).into(),
                 };
-                Ok((spans!(cs, "d", ss, exp_str), IntSlice(results)))
+                Ok((spans!(cs, "d", ss, exp_str), Value::IntSlice(results)))
             }
         }
     }
 }
 
-named!(value<&str, Value>, sp!(alt!(
+named!(value<&str, AstValue>, sp!(alt!(
     do_parse!(
         sp!(tag!("-")) >>
         v: number >>
-        (Value::Integer(-v))
+        (AstValue::Int(-v))
     ) |
-    map!(number, |v| Value::Integer(v)) |
-    map!(delimited!(tag!("("), expression, tag!(")")), |v| Value::Sub(Box::new(v))) |
-    map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| Value::Slice(v)) |
-    value!(Value::Fate, tag!("F")) |
-    value!(Value::Hundred, tag!("%"))
+    map!(number, |v| AstValue::Int(v)) |
+    map!(delimited!(tag!("("), expression, tag!(")")), |v| AstValue::Sub(Box::new(v))) |
+    map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| AstValue::Slice(v)) |
+    value!(AstValue::Fate, tag!("F")) |
+    value!(AstValue::Hundred, tag!("%"))
 )));
 #[derive(Debug)]
-pub enum Value {
-    Integer(i64),           // ...
+pub enum AstValue {
+    Int(i64),               // ...
     Sub(Box<Expression>),   // "(" ... ")"
     Slice(Vec<Expression>), // "[" ... "]"
     Fate,                   // "F"
     Hundred,                // "%"
 }
-impl Evaluable for Value {
-    fn eval(&self, limit: &mut EvaluationLimiter) -> Result<(Vec<Span>, EvaluatedValue), String> {
+impl Evaluable for AstValue {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
         match self {
-            Value::Integer(i) => Ok((spans!(format!("{}", i)), Integer(*i))),
-            Value::Sub(expr) => {
+            AstValue::Int(i) => Ok((spans!(format!("{}", i)), Value::Int(*i))),
+            AstValue::Sub(expr) => {
                 let (es, ev) = expr.eval(limit)?;
                 Ok((spans!("(", es, ")"), ev))
             }
-            Value::Slice(s) => {
+            AstValue::Slice(s) => {
                 let (strs, vals) = s
                     .iter()
                     .map(|e| {
                         let (s, v) = e.eval(limit)?;
-                        Ok((s, v.as_i64()?))
+                        Ok((s, v.to_int()?))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
                     .drain(..)
                     .unzip();
 
-                Ok((spans!("[", span_join(strs, ", "), "]"), IntSlice(vals)))
+                Ok((spans!("[", span_join(strs, ", "), "]"), Value::IntSlice(vals)))
             }
-            Value::Fate => Ok((spans!("F"), IntSlice(vec![-1, 0, 1]))),
-            Value::Hundred => Ok((spans!("%"), Integer(100))),
+            AstValue::Fate => Ok((spans!("F"), Value::IntSlice(vec![-1, 0, 1]))),
+            AstValue::Hundred => Ok((spans!("%"), Value::Int(100))),
         }
     }
 }
@@ -544,19 +448,19 @@ pub enum AddSubOp {
     Sub, // -
 }
 impl AddSubOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<EvaluatedValue, String> {
-        if let (IntSlice(l), IntSlice(r)) = (&left, &right) {
+    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
+        if let (Value::IntSlice(l), Value::IntSlice(r)) = (&left, &right) {
             let mut l = l.clone();
             l.extend_from_slice(&r);
-            return Ok(IntSlice(l));
+            return Ok(Value::IntSlice(l));
         }
-        let l = left.as_i64()?;
-        let r = right.as_i64()?;
+        let l = left.to_int()?;
+        let r = right.to_int()?;
         let result = match self {
             AddSubOp::Add => l.wrapping_add(r),
             AddSubOp::Sub => l.wrapping_sub(r),
         };
-        Ok(Integer(result))
+        Ok(Value::Int(result))
     }
 }
 impl Display for AddSubOp {
@@ -575,14 +479,14 @@ pub enum MulDivOp {
     Div, // /
 }
 impl MulDivOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<EvaluatedValue, String> {
-        let l = left.as_i64()?;
-        let r = right.as_i64()?;
+    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
+        let l = left.to_int()?;
+        let r = right.to_int()?;
         let result = match self {
             MulDivOp::Mul => l.wrapping_mul(r),
             MulDivOp::Div => l.wrapping_div(r),
         };
-        Ok(Integer(result))
+        Ok(Value::Int(result))
     }
 }
 impl Display for MulDivOp {
@@ -622,15 +526,15 @@ impl CompareOp {
             CompareOp::Unequal => l != r,
         }
     }
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Vec<Span>, EvaluatedValue), String> {
+    fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
         let l = match left {
-            Integer(v) => Ok(v),
-            IntSlice(v) => IntSlice(v).as_i64(),
+            Value::Int(v) => Ok(v),
+            Value::IntSlice(v) => Value::IntSlice(v).to_int(),
             v => Err(format!("cannot compare {} {} {}", v, self, right)),
         }?;
         match right {
-            Integer(r) => Ok((vec![], Bool(self.compare(l, r)))),
-            IntSlice(s) => {
+            Value::Int(r) => Ok((vec![], Value::Bool(self.compare(l, r)))),
+            Value::IntSlice(s) => {
                 let (strings, values): (Vec<Span>, Vec<bool>) = s
                     .iter()
                     .map(|r| {
@@ -641,7 +545,7 @@ impl CompareOp {
                         }
                     })
                     .unzip();
-                Ok((spans!("[", span_join(strings, ", "), "]"), BoolSlice(values)))
+                Ok((spans!("[", span_join(strings, ", "), "]"), Value::BoolSlice(values)))
             }
             v => Err(format!("cannot compare {} {} {}", l, self, v)),
         }
@@ -684,10 +588,10 @@ fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'stat
 }
 
 impl ModOp {
-    fn apply(&self, left: EvaluatedValue, right: EvaluatedValue) -> Result<(Vec<Span>, EvaluatedValue), String> {
-        let mut l = left.as_int_slice()?;
+    fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
+        let mut l = left.to_int_slice()?;
         l.sort();
-        let r = right.as_i64()? as usize;
+        let r = right.to_int()? as usize;
         if r > l.len() {
             return Err(format!(
                 "cannot evaluate a keep/drop {} operation on {} dice",
@@ -707,7 +611,7 @@ impl ModOp {
                 (format_arrays(Color::Red, &l[..i], Color::Yellow, &l[i..]), &l[i..])
             }
         };
-        Ok((s, IntSlice(result.to_vec())))
+        Ok((s, Value::IntSlice(result.to_vec())))
     }
 }
 impl Display for ModOp {
