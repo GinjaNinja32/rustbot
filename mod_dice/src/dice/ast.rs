@@ -96,10 +96,9 @@ impl Evaluable for Comparison {
             None => Ok(l),
             Some((op, term)) => {
                 let r = term.eval(limit)?;
-                let (os, v) = op.apply(l.1, r.1)?;
+                let v = op.apply(l.1, r.1)?;
 
-                let left = spans!(l.0, format!("{}", op), r.0);
-                Ok((if os.is_empty() { left } else { spans!(left, "=", os) }, v))
+                Ok((spans!(l.0, format!("{}", op), r.0), v))
             }
         }
     }
@@ -498,16 +497,70 @@ impl Display for MulDivOp {
     }
 }
 
-named!(compare_op<&str, CompareOp>, sp!(alt!(
-    value!(CompareOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
-    value!(CompareOp::Less, tag!("<")) |
-    value!(CompareOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
-    value!(CompareOp::Greater, tag!(">")) |
-    value!(CompareOp::Equal, alt!(tag!("==") | tag!("="))) |
-    value!(CompareOp::Unequal, alt!(tag!("!=") | tag!("<>")))
+named!(compare_op<&str, CompareOp>, sp!(do_parse!(
+    each_left: map!(opt!(tag!("e")), |v| v.is_some()) >>
+    op: compare_base_op >>
+    each_right: map!(opt!(tag!("e")), |v| v.is_some()) >>
+    ( CompareOp { each_left, op, each_right} )
 )));
 #[derive(Debug)]
-pub enum CompareOp {
+pub struct CompareOp {
+    each_left: bool,
+    op: CompareBaseOp,
+    each_right: bool,
+}
+impl CompareOp {
+    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
+        self._apply(&left, &right)
+            .map_err(|e| format!("cannot compare {} {} {}: {}", left, self, right, e))
+    }
+    fn _apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
+        let result = match (self.each_left, self.each_right) {
+            (false, false) => Value::Bool(self.op.compare(left.to_int()?, right.to_int()?)),
+            (false, true) => {
+                let l = left.to_int()?;
+                Value::BoolSlice(right.to_int_slice()?.iter().map(|r| self.op.compare(l, *r)).collect())
+            }
+            (true, false) => {
+                let r = right.to_int()?;
+                Value::BoolSlice(left.to_int_slice()?.iter().map(|l| self.op.compare(*l, r)).collect())
+            }
+            (true, true) => {
+                let lv = left.to_int_slice()?;
+                let rv = right.to_int_slice()?;
+                if lv.len() != rv.len() {
+                    return Err("mismatched lengths".to_string());
+                }
+                Value::BoolSlice((0..lv.len()).map(|i| self.op.compare(lv[i], rv[i])).collect())
+            }
+        };
+
+        Ok(result)
+    }
+}
+impl Display for CompareOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.each_left {
+            write!(f, "e")?;
+        }
+        write!(f, "{}", self.op)?;
+        if self.each_right {
+            write!(f, "e")?;
+        }
+        Ok(())
+    }
+}
+
+named!(compare_base_op<&str, CompareBaseOp>, sp!(alt!(
+    value!(CompareBaseOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
+    value!(CompareBaseOp::Less, tag!("<")) |
+    value!(CompareBaseOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
+    value!(CompareBaseOp::Greater, tag!(">")) |
+    value!(CompareBaseOp::Equal, alt!(tag!("==") | tag!("="))) |
+    value!(CompareBaseOp::Unequal, alt!(tag!("!=") | tag!("<>")))
+)));
+#[derive(Debug)]
+pub enum CompareBaseOp {
     Less,      // <
     LessEq,    // <=, =<
     Greater,   // >
@@ -515,51 +568,27 @@ pub enum CompareOp {
     Equal,     // ==, =
     Unequal,   // !=, <>
 }
-impl CompareOp {
+impl CompareBaseOp {
     fn compare(&self, l: i64, r: i64) -> bool {
         match self {
-            CompareOp::Less => l < r,
-            CompareOp::LessEq => l <= r,
-            CompareOp::Greater => l > r,
-            CompareOp::GreaterEq => l >= r,
-            CompareOp::Equal => l == r,
-            CompareOp::Unequal => l != r,
-        }
-    }
-    fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
-        let l = match left {
-            Value::Int(v) => Ok(v),
-            Value::IntSlice(v) => Value::IntSlice(v).to_int(),
-            v => Err(format!("cannot compare {} {} {}", v, self, right)),
-        }?;
-        match right {
-            Value::Int(r) => Ok((vec![], Value::Bool(self.compare(l, r)))),
-            Value::IntSlice(s) => {
-                let (strings, values): (Vec<Span>, Vec<bool>) = s
-                    .iter()
-                    .map(|r| {
-                        if self.compare(l, *r) {
-                            (span!(Color::Green; "{}", *r), true)
-                        } else {
-                            (span!(Color::Red; "{}", *r), false)
-                        }
-                    })
-                    .unzip();
-                Ok((spans!("[", span_join(strings, ", "), "]"), Value::BoolSlice(values)))
-            }
-            v => Err(format!("cannot compare {} {} {}", l, self, v)),
+            Self::Less => l < r,
+            Self::LessEq => l <= r,
+            Self::Greater => l > r,
+            Self::GreaterEq => l >= r,
+            Self::Equal => l == r,
+            Self::Unequal => l != r,
         }
     }
 }
-impl Display for CompareOp {
+impl Display for CompareBaseOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CompareOp::Less => write!(f, "<"),
-            CompareOp::LessEq => write!(f, "<="),
-            CompareOp::Greater => write!(f, ">"),
-            CompareOp::GreaterEq => write!(f, ">="),
-            CompareOp::Equal => write!(f, "=="),
-            CompareOp::Unequal => write!(f, "!="),
+            Self::Less => write!(f, "<"),
+            Self::LessEq => write!(f, "<="),
+            Self::Greater => write!(f, ">"),
+            Self::GreaterEq => write!(f, ">="),
+            Self::Equal => write!(f, "=="),
+            Self::Unequal => write!(f, "!="),
         }
     }
 }
