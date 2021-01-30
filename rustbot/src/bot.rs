@@ -329,6 +329,15 @@ impl Rustbot {
 
         replacements
     }
+
+    fn str_max_bytes(s: &str, n: usize) -> &str {
+        if s.len() <= n {
+            return s;
+        }
+
+        let (last_char_inside, _) = s.char_indices().take_while(|(i, _)| *i <= n).last().unwrap();
+        &s[..last_char_inside]
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -453,7 +462,7 @@ impl types::Bot for Rustbot {
 
     fn irc_send_privmsg(&self, cfg: &str, channel: &str, message: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
-            let message = if message.len() > 490 { &message[..490] } else { message };
+            let message = Self::str_max_bytes(message, 490);
             client.send_privmsg(channel, message).map_err(from_irc)?;
             Ok(())
         } else {
@@ -463,7 +472,7 @@ impl types::Bot for Rustbot {
 
     fn irc_send_raw(&self, cfg: &str, line: &str) -> Result<()> {
         if let Some(client) = self.clients.read().get(cfg) {
-            let line = if line.len() > 510 { &line[..510] } else { line };
+            let line = Self::str_max_bytes(line, 510);
             client.send(line).map_err(from_irc)?;
             Ok(())
         } else {
