@@ -18,9 +18,9 @@ file=$1
 
 if [[ $2 == "run" ]]; then
 	if [[ "$secure" == "true" ]]; then
-		DreamDaemon "$file.dmb" -invisible -safe 2>&1 | tail -n +4 | head -c 512
+		{ DreamDaemon "$file.dmb" -invisible -safe; } 2>&1 | tail -n +4 | head -c 512
 	else
-		DreamDaemon "$file.dmb" -invisible -ultrasafe 2>&1 | tail -n +4 | head -c 512
+		{ DreamDaemon "$file.dmb" -invisible -ultrasafe; } 2>&1 | tail -n +4 | head -c 512
 	fi
 	exit 0
 fi
