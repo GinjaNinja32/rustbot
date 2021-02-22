@@ -149,10 +149,17 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
 }
 
 named!(line<&str, Dice>, do_parse!(
-    dice: terminated!(many1!(complete!(tuple!(number, die))), tag!("\n")) >>
-    ( Dice(dice) )
+    dice: many1!(tuple!(number, die)) >>
+    extra: opt!(do_parse!(
+        tag!("+") >>
+        e: many0!(tuple!(number, extra_die)) >>
+        (e)
+    )) >>
+    tag!("\n") >>
+    ( Dice({let mut v = vec![]; v.extend_from_slice(&dice); if let Some(e) = extra { v.extend_from_slice(&e) }; v}) )
 ));
 
+#[derive(Debug)]
 struct Dice(Vec<(u8, Die)>);
 
 named!(die<&str, Die>, sp!(alt!(
@@ -165,6 +172,15 @@ named!(die<&str, Die>, sp!(alt!(
     value!(Die::Force,       alt!(tag!("F") | tag!("w")))   // force, white
 )));
 
+named!(extra_die<&str, Die>, sp!(alt!(
+    value!(Die::AddSuccess,   alt!(tag!("S") | tag!("s"))) |
+    value!(Die::AddFailure,   alt!(tag!("F") | tag!("f"))) |
+    value!(Die::AddAdvantage, alt!(tag!("A") | tag!("a"))) |
+    value!(Die::AddThreat,    alt!(tag!("T") | tag!("t"))) |
+    value!(Die::AddTriumph,   alt!(tag!("TR") | tag!("tr"))) |
+    value!(Die::AddDespair,   alt!(tag!("D") | tag!("d")))
+)));
+
 #[derive(Copy, Clone)]
 enum Die {
     Boost,
@@ -174,6 +190,13 @@ enum Die {
     Proficiency,
     Challenge,
     Force,
+
+    AddSuccess,
+    AddFailure,
+    AddAdvantage,
+    AddThreat,
+    AddTriumph,
+    AddDespair,
 }
 
 impl Die {
@@ -250,6 +273,12 @@ impl Die {
                 (emoji::FLL, DR_LIGHT * 2),
                 (emoji::FLL, DR_LIGHT * 2),
             ],
+            Self::AddSuccess => vec![(emoji::RS, DR_SUCCESS)],
+            Self::AddFailure => vec![(emoji::RF, DR_FAIL)],
+            Self::AddAdvantage => vec![(emoji::RA, DR_ADVANTAGE)],
+            Self::AddThreat => vec![(emoji::RT, DR_THREAT)],
+            Self::AddTriumph => vec![(emoji::RTR, DR_TRIUMPH)],
+            Self::AddDespair => vec![(emoji::RD, DR_DESPAIR)],
         }
     }
 }
@@ -332,9 +361,9 @@ const DR_LIGHT: DiceResult = DiceResult { light: 1, ..DR_ZERO };
 const DR_DARK: DiceResult = DiceResult { dark: 1, ..DR_ZERO };
 
 named!(number<&str, u8>,
-    map_res!(take_while!(is_digit), |s: &str| s.parse::<u8>())
+    map_res!(take_while!(is_digit), |s: &str| if s.is_empty() { Ok(1) } else { s.parse::<u8>() })
 );
 
 fn is_digit(c: char) -> bool {
-    '0' <= c && c <= '9'
+    ('0'..'9').contains(&c)
 }
