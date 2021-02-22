@@ -38,12 +38,10 @@ fn format_dice<'a>(
 }
 
 fn format_single<'a>(n: i8, emoji: Span<'static>, string: &'a str, pl: &'a str) -> Vec<Vec<Span<'a>>> {
-    if n == 0 {
-        vec![]
-    } else if n == 1 {
-        vec![spans! {span!(Format::Bold; "1"), " ", emoji, " ", string}]
-    } else {
-        vec![spans! {span!(Format::Bold; "{}", n), " ", emoji, " ", string, pl}]
+    match n {
+        0 => vec![],
+        1 => vec![spans! {span!(Format::Bold; "1"), " ", emoji, " ", string}],
+        _ => vec![spans! {span!(Format::Bold; "{}", n), " ", emoji, " ", string, pl}],
     }
 }
 
@@ -71,15 +69,61 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
         vec![spans! {"Neutral"}]
     } else {
         let mut result_spans = vec![];
-        result_spans.append(&mut format_dice(
-            total.success_fail,
-            emoji::RS,
-            "Success",
-            "es",
-            emoji::RF,
-            "Failure",
-            "s",
-        ));
+
+        if total.triumph + total.despair == 0 {
+            result_spans.append(&mut format_dice(
+                total.success_fail,
+                emoji::RS,
+                "Success",
+                "es",
+                emoji::RF,
+                "Failure",
+                "s",
+            ));
+        } else {
+            let net_success_fail = total.success_fail + total.triumph - total.despair;
+            let signum_delta = net_success_fail.signum() - total.success_fail.signum();
+            if signum_delta.abs() == 2 {
+                // Failure to success or vice versa
+                result_spans.push(spans! {
+                    span_join(format_dice(
+                        total.success_fail,
+                        emoji::RS,
+                        "Success",
+                        "es",
+                        emoji::RF,
+                        "Failure",
+                        "s",
+                    ), ""),
+                    " (net ",
+                    span_join(format_dice(
+                        net_success_fail,
+                        emoji::RS,
+                        "Success",
+                        "es",
+                        emoji::RF,
+                        "Failure",
+                        "s",
+                    ), ""),
+                    ")",
+                });
+            } else {
+                // Either unchanged, or one side is zero
+                if total.success_fail + net_success_fail < 0 {
+                    result_spans.push(spans! {
+                        span!{Format::Bold; "{}", -total.success_fail}, " (net ",
+                        span!{Format::Bold; "{}", -net_success_fail}, ") ",
+                        emoji::RF, "Failures",
+                    });
+                } else {
+                    result_spans.push(spans! {
+                        span!{Format::Bold; "{}", total.success_fail}, " (net ",
+                        span!{Format::Bold; "{}", net_success_fail}, ") ",
+                        emoji::RS, "Successes",
+                    });
+                }
+            }
+        }
         result_spans.append(&mut format_dice(
             total.advantage_threat,
             emoji::RA,
