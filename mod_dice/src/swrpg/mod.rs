@@ -175,8 +175,8 @@ named!(extra_die<&str, Die>, sp!(alt!(
     value!(Die::AddSuccess,   alt!(tag!("S") | tag!("s"))) |
     value!(Die::AddFailure,   alt!(tag!("F") | tag!("f"))) |
     value!(Die::AddAdvantage, alt!(tag!("A") | tag!("a"))) |
+    value!(Die::AddTriumph,   alt!(tag!("TR") | tag!("tr"))) | // must precede threat
     value!(Die::AddThreat,    alt!(tag!("T") | tag!("t"))) |
-    value!(Die::AddTriumph,   alt!(tag!("TR") | tag!("tr"))) |
     value!(Die::AddDespair,   alt!(tag!("D") | tag!("d")))
 )));
 
