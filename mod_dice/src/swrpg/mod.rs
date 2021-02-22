@@ -113,13 +113,13 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
                     result_spans.push(spans! {
                         span!{Format::Bold; "{}", -total.success_fail}, " (net ",
                         span!{Format::Bold; "{}", -net_success_fail}, ") ",
-                        emoji::RF, "Failures",
+                        emoji::RF, " Failures",
                     });
                 } else {
                     result_spans.push(spans! {
                         span!{Format::Bold; "{}", total.success_fail}, " (net ",
                         span!{Format::Bold; "{}", net_success_fail}, ") ",
-                        emoji::RS, "Successes",
+                        emoji::RS, " Successes",
                     });
                 }
             }
