@@ -159,7 +159,6 @@ named!(line<&str, Dice>, do_parse!(
     ( Dice({let mut v = vec![]; v.extend_from_slice(&dice); if let Some(e) = extra { v.extend_from_slice(&e) }; v}) )
 ));
 
-#[derive(Debug)]
 struct Dice(Vec<(u8, Die)>);
 
 named!(die<&str, Die>, sp!(alt!(
