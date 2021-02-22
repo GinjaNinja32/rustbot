@@ -29,7 +29,7 @@ fn format_dice<'a>(
     negative_emoji: Span<'static>,
     negative: &'a str,
     negative_pl: &'a str,
-) -> Vec<Vec<Span<'a>>> {
+) -> Vec<Span<'a>> {
     if n < 0 {
         format_single(-n, negative_emoji, negative, negative_pl)
     } else {
@@ -37,11 +37,11 @@ fn format_dice<'a>(
     }
 }
 
-fn format_single<'a>(n: i8, emoji: Span<'static>, string: &'a str, pl: &'a str) -> Vec<Vec<Span<'a>>> {
+fn format_single<'a>(n: i8, emoji: Span<'static>, string: &'a str, pl: &'a str) -> Vec<Span<'a>> {
     match n {
         0 => vec![],
-        1 => vec![spans! {span!(Format::Bold; "1"), " ", emoji, " ", string}],
-        _ => vec![spans! {span!(Format::Bold; "{}", n), " ", emoji, " ", string, pl}],
+        1 => spans! {span!(Format::Bold; "1"), " ", emoji, " ", string},
+        _ => spans! {span!(Format::Bold; "{}", n), " ", emoji, " ", string, pl},
     }
 }
 
@@ -71,7 +71,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
         let mut result_spans = vec![];
 
         if total.triumph + total.despair == 0 {
-            result_spans.append(&mut format_dice(
+            result_spans.push(format_dice(
                 total.success_fail,
                 emoji::RS,
                 "Success",
@@ -86,7 +86,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
             if signum_delta.abs() == 2 {
                 // Failure to success or vice versa
                 result_spans.push(spans! {
-                    span_join(format_dice(
+                    format_dice(
                         total.success_fail,
                         emoji::RS,
                         "Success",
@@ -94,9 +94,9 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
                         emoji::RF,
                         "Failure",
                         "s",
-                    ), ""),
+                    ),
                     " (net ",
-                    span_join(format_dice(
+                    format_dice(
                         net_success_fail,
                         emoji::RS,
                         "Success",
@@ -104,7 +104,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
                         emoji::RF,
                         "Failure",
                         "s",
-                    ), ""),
+                    ),
                     ")",
                 });
             } else {
@@ -124,7 +124,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
                 }
             }
         }
-        result_spans.append(&mut format_dice(
+        result_spans.push(format_dice(
             total.advantage_threat,
             emoji::RA,
             "Advantage",
@@ -133,10 +133,10 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
             "Threat",
             "s",
         ));
-        result_spans.append(&mut format_single(total.triumph, emoji::RTR, "Triumph", "s"));
-        result_spans.append(&mut format_single(total.despair, emoji::RD, "Despair", "s"));
-        result_spans.append(&mut format_single(total.light, emoji::RLF, "Light Side", ""));
-        result_spans.append(&mut format_single(total.dark, emoji::RDF, "Dark Side", ""));
+        result_spans.push(format_single(total.triumph, emoji::RTR, "Triumph", "s"));
+        result_spans.push(format_single(total.despair, emoji::RD, "Despair", "s"));
+        result_spans.push(format_single(total.light, emoji::RLF, "Light Side", ""));
+        result_spans.push(format_single(total.dark, emoji::RDF, "Dark Side", ""));
 
         result_spans
     };
@@ -144,7 +144,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
     Ok(spans! {
        span_join(dice_spans, ""),
        ": ",
-       span_join(result_spans, ", "),
+       span_join(result_spans.into_iter().filter(|v| !v.is_empty()).collect(), ", "),
     })
 }
 
