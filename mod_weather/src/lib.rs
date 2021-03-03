@@ -41,7 +41,7 @@ impl Module {
         let text = result.text()?;
         let data: Response = match serde_json::from_str(&text) {
             Err(e) => {
-                println!("failed to unmarshal weather: {}:\n{}", e, text);
+                warn!("failed to unmarshal weather: {}:\n{}", e, text);
                 return Err(e.into());
             }
             Ok(v) => v,

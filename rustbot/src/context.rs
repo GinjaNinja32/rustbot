@@ -77,7 +77,7 @@ impl<'a> types::Context for Context<'a> {
                     &[&self.config, &nick, &user, &host],
                 ) {
                     Err(e) => {
-                        println!("error: {}", e);
+                        error!("error fetching perms: {}", e);
                         Perms::None
                     }
                     Ok(v) => {
@@ -96,7 +96,7 @@ impl<'a> types::Context for Context<'a> {
                     &[&self.config, &(*user.id.as_u64() as i64)],
                 ) {
                     Err(e) => {
-                        println!("error: {}", e);
+                        error!("error fetching perms: {}", e);
                         Perms::None
                     }
                     Ok(v) => {

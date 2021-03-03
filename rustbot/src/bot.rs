@@ -100,7 +100,7 @@ impl Rustbot {
 
         match msg.channel_id.to_channel(&disctx) {
             Err(e) => {
-                println!("failed to determine channel type for incoming message: {}", e);
+                warn!("failed to determine channel type for incoming message: {}", e);
                 return;
             }
             Ok(c) => match c {
@@ -184,7 +184,7 @@ impl Rustbot {
             Ok(()) => (),
             Err(err) => {
                 if let Err(e) = ctx.say(&format!("command failed: {}", err)) {
-                    println!("failed to handle error: {}", e);
+                    error!("failed to handle error: {}", e);
                 }
             }
         }
@@ -440,7 +440,7 @@ impl FromSql<'_> for ArgumentTransforms {
 impl types::Bot for Rustbot {
     fn drop_module(&self, name: &str) -> Result<()> {
         if let Some(mut m) = self.modules.write().remove(name) {
-            println!("drop module: {}", name);
+            info!("drop module: {}", name);
             let mut db = self.db.lock();
             db
                 .execute(
@@ -470,7 +470,7 @@ impl types::Bot for Rustbot {
     }
 
     fn load_module(&self, name: &str) -> Result<()> {
-        println!("load module: {}", name);
+        info!("load module: {}", name);
         let libpath = if cfg!(debug_assertions) {
             format!("libmod_{}.so", name)
         } else {

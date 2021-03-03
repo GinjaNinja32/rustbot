@@ -35,11 +35,6 @@ use std::{thread, time::Duration};
 
 // Spawns a new thread that watches for deadlocks.
 pub fn start_deadlock_monitor() {
-    /*
-    println!("Starting deadlock monitor.");
-    thread::Builder::new()
-        .name("thread monitor".to_owned())
-        .spawn(move ||*/
     loop {
         thread::sleep(Duration::from_secs(10));
         let deadlocks = deadlock::check_deadlock();
@@ -56,8 +51,4 @@ pub fn start_deadlock_monitor() {
             }
         }
     }
-    /*
-    )
-    .unwrap();
-    */
 }

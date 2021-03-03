@@ -9,4 +9,5 @@ pub mod types;
 
 pub mod prelude {
     pub use crate::types::*;
+    pub use log::{debug, error, info, trace, warn};
 }

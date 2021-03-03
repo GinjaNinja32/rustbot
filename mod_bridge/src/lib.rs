@@ -100,7 +100,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
                         (&|user| span!(Format::Bold; "* {}", user), v)
                     }
                     _ => {
-                        println!("unexpected CTCP message {:?} {:?} in do_bridge", parts[0], parts[1]);
+                        warn!("unexpected CTCP message {:?} {:?} in do_bridge", parts[0], parts[1]);
                         return Ok(());
                     }
                 }

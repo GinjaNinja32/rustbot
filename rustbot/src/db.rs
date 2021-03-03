@@ -24,7 +24,7 @@ fn migrate(pc: &config::Postgres) -> Result<String> {
     config.setup()?;
     let config = config.reload()?;
 
-    println!("Applying all migrations...");
+    info!("Applying all migrations...");
     migrant_lib::Migrator::with_config(&config)
         .direction(migrant_lib::Direction::Up)
         .all(true)
