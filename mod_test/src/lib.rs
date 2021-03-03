@@ -2,6 +2,7 @@ use futures::channel::oneshot::Receiver;
 use futures::prelude::future;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
+use log::info;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
@@ -51,5 +52,6 @@ async fn helloworldserver(unload: Receiver<()>) {
 }
 
 async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
+    info!("hello world server called");
     Ok(Response::new("Hello, World".into()))
 }

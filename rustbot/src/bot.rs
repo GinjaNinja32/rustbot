@@ -1,8 +1,10 @@
 use ::irc::client::ext::ClientExt;
 use ::irc::client::prelude as irc;
 use ::irc::client::prelude::Client;
+use flexi_logger::{LogSpecBuilder, Logger, LoggerHandle};
 use futures::channel::oneshot::{self, Receiver, Sender};
 use libloading::Library;
+use log::{error, info, Level};
 use parking_lot::{Mutex, RwLock};
 use postgres::types::FromSql;
 use regex::Regex;
@@ -32,6 +34,12 @@ pub struct Rustbot {
     db: Mutex<postgres::Client>,
     modules: RwLock<BTreeMap<String, Module>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
+    logger: Mutex<LogInfo>,
+}
+
+struct LogInfo {
+    logger: LoggerHandle,
+    current_level: Level,
 }
 
 fn irc_parse_prefix(prefix: Option<String>) -> Option<context::Prefix> {
@@ -338,6 +346,36 @@ impl Rustbot {
         let (last_char_inside, _) = s.char_indices().take_while(|(i, _)| *i <= n).last().unwrap();
         &s[..last_char_inside]
     }
+
+    fn update_logger_spec(&self) -> Result<()> {
+        let mut logger = self.logger.lock();
+
+        let mut builder = LogSpecBuilder::new();
+        builder.default(logger.current_level.to_level_filter());
+
+        let modules: Vec<(String, String)> = self
+            .db
+            .lock()
+            .query(
+                "SELECT name, log_level::text FROM modules WHERE log_level IS NOT NULL",
+                &[],
+            )?
+            .iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect();
+
+        for (m, l) in &modules {
+            let level = l.parse::<Level>()?;
+
+            builder.module(&format!("mod_{}", m), level.to_level_filter());
+        }
+
+        info!("setting logger spec: {:?}", builder);
+
+        logger.logger.set_new_spec(builder.build());
+
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -454,6 +492,25 @@ impl types::Bot for Rustbot {
         })?;
         self.modules.write().insert(name.to_string(), m);
         Ok(())
+    }
+
+    fn set_log_level(&self, level: Level) -> Result<()> {
+        self.logger.lock().current_level = level;
+        self.update_logger_spec()
+    }
+
+    fn set_module_log_level(&self, module: &str, level: Option<Level>) -> Result<()> {
+        if let Some(level) = level {
+            self.db.lock().execute(
+                "UPDATE modules SET log_level = $1::text::log_level WHERE name = $2",
+                &[&level.to_string().to_ascii_lowercase().as_str(), &module],
+            )?;
+        } else {
+            self.db
+                .lock()
+                .execute("UPDATE modules SET log_level = NULL WHERE name = $1", &[&module])?;
+        }
+        self.update_logger_spec()
     }
 
     fn sql(&self) -> &Mutex<postgres::Client> {
@@ -629,7 +686,96 @@ impl types::Bot for Rustbot {
     }
 }
 
+const LOG_MODULE_PATH_MAX_LEN: usize = 25;
+// Smart module path truncation.
+// Truncated segments are indicated by `segm~`.
+// Omitted segments are indicated by `..` instead of `::`
+// For example, shortening `some::module::path` will yield:
+//   `some..` for n=6 and n=7
+//   `some..pa~` at n=9
+//   `some..path` for n in 10..=13
+//   `some::mo~::path` at n=15
+//   `some::module::path` for n>=18
+pub(crate) fn truncate_module_path(s: &str, n: usize) -> Cow<'_, str> {
+    // If n is less than four, we can't even show `x~..`.
+    let n = if n < 4 { 4 } else { n };
+
+    if s.len() <= n {
+        return s.into();
+    }
+    let parts: Vec<_> = s.split("::").collect();
+
+    let first = parts[0];
+
+    if first.len() + 2 > n {
+        return format!("{}~..", &first[..n - 3]).into();
+    }
+
+    let mut len_so_far = 2 + first.len();
+    for i in (1..parts.len()).rev() {
+        let this_len = parts[i].len();
+
+        if len_so_far + 4 + this_len <= n {
+            // This segment will fit, with room to spare for at least 'x~::'
+            len_so_far += 2 + this_len;
+            continue;
+        }
+
+        let first_to_this = if i == 1 { "::" } else { ".." };
+
+        if len_so_far + this_len <= n {
+            // This segment will entirely fit
+            return format!("{}{}{}", first, first_to_this, parts[i..].join("::")).into();
+        }
+
+        if len_so_far + 1 < n {
+            // Part of this segment will fit
+            let fitting_part = &parts[i][..n - len_so_far - 1];
+
+            if i + 1 != parts.len() {
+                return format!(
+                    "{}{}{}~::{}",
+                    first,
+                    first_to_this,
+                    fitting_part,
+                    parts[i + 1..].join("::")
+                )
+                .into();
+            } else {
+                return format!("{}{}{}~", first, first_to_this, fitting_part).into();
+            }
+        }
+
+        return format!("{}{}{}", first, first_to_this, parts[i + 1..].join("::")).into();
+    }
+
+    // Exiting the above loop implies all segments fit unmodified into n characters, but we checked
+    // whether that's the case and returned early, so we can't get here unless there's a bug in the
+    // logic.
+    unreachable!();
+}
+
 pub fn start() -> Result<()> {
+    // Initialise logging
+    let logger = Logger::with_str("info")
+        .format(|w, now, record| {
+            write!(
+                w,
+                "{} {} {:>mod_len$}:{}: {}",
+                now.now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                record.level(),
+                record
+                    .module_path()
+                    .map(|e| truncate_module_path(e, LOG_MODULE_PATH_MAX_LEN))
+                    .unwrap_or_else(|| "<unnamed>".into()),
+                record.line().unwrap_or(0),
+                &record.args(),
+                mod_len = LOG_MODULE_PATH_MAX_LEN,
+            )
+        })
+        .start()?;
+
+    // Load the config
     let config = config::load()?;
 
     let b = Arc::new(Rustbot {
@@ -638,7 +784,13 @@ pub fn start() -> Result<()> {
         db: Mutex::new(db::open(&config.postgres)?),
         modules: RwLock::new(BTreeMap::new()),
         commands: RwLock::new(BTreeMap::new()),
+        logger: Mutex::new(LogInfo {
+            logger,
+            current_level: Level::Info,
+        }),
     });
+
+    b.update_logger_spec()?;
 
     {
         let modules: Vec<String> = {
@@ -685,7 +837,7 @@ pub fn start() -> Result<()> {
                     client.send_cap_req(&[irc::Capability::MultiPrefix]).map_err(from_irc)?;
                     client.identify().map_err(from_irc)?;
                     b.clients.write().insert(c.id.clone(), client.clone());
-                    println!("connect: {}", irc_descriptor(&c));
+                    info!("connect: {}", irc_descriptor(&c));
                     client
                         .for_each_incoming(|irc_msg| {
                             let b = b.clone();
@@ -716,7 +868,7 @@ pub fn start() -> Result<()> {
                     )?;
 
                     b.caches.write().insert(c.id.clone(), dis.cache_and_http.clone());
-                    println!("connect: {}", c.id);
+                    info!("connect: {}", c.id);
                     dis.start()?;
                     Ok(())
                 });
@@ -732,7 +884,7 @@ fn run_with_backoff(desc: &str, f: &dyn Fn() -> Result<()>) {
         let start = Instant::now();
         match f() {
             Ok(()) => return,
-            Err(e) => println!("{} failed: {}", desc, e),
+            Err(e) => error!("{} failed: {}", desc, e),
         }
 
         if start.elapsed() > Duration::from_secs(60) {

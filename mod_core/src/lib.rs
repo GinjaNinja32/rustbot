@@ -1,3 +1,4 @@
+use log::Level;
 use rustbot::prelude::*;
 use std::process::Command as ProcessCommand;
 use std::str;
@@ -8,6 +9,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("load", Command::new(load).req_perms(Perms::Modules));
     meta.cmd("reload", Command::new(reload).req_perms(Perms::Modules));
     meta.cmd("recompile", Command::new(recompile).req_perms(Perms::Modules));
+    meta.cmd("log", Command::new(log).req_perms(Perms::Modules));
     meta.cmd(
         "enable",
         Command::new(move |ctx, args| set_enabled(ctx, args, true)).req_perms(Perms::Modules),
@@ -100,5 +102,33 @@ fn set_enabled(ctx: &dyn Context, args: &str, target: bool) -> Result<()> {
         }
     }
 
+    ctx.reply(Message::Simple("Done".to_string()))
+}
+
+fn parse_log_level(s: &str) -> Result<Option<Level>> {
+    Ok(Some(match s {
+        "err" | "error" => Level::Error,
+        "warn" => Level::Warn,
+        "info" => Level::Info,
+        "debug" => Level::Debug,
+        "trace" => Level::Trace,
+        "none" => return Ok(None),
+        _ => return Err("invalid log level specification".into()),
+    }))
+}
+
+fn log(ctx: &dyn Context, args: &str) -> Result<()> {
+    let a = args.split(' ').collect::<Vec<_>>();
+    match a.as_slice() {
+        [module, level] => {
+            let level = parse_log_level(level)?;
+            ctx.bot().set_module_log_level(module, level)?;
+        }
+        [level] => match parse_log_level(level)? {
+            Some(level) => ctx.bot().set_log_level(level)?,
+            None => return Err("invalid log level specification".into()),
+        },
+        _ => return Err("unknown argument format; try 'log LEVEL' or 'log MODULE LEVEL'".into()),
+    }
     ctx.reply(Message::Simple("Done".to_string()))
 }

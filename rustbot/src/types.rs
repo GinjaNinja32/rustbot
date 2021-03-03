@@ -1,5 +1,6 @@
 #![allow(non_upper_case_globals)]
 
+use log::Level;
 use parking_lot::Mutex;
 use postgres::types::FromSql;
 use std::borrow::Cow;
@@ -108,6 +109,8 @@ pub trait Meta {
 pub trait Bot {
     fn load_module(&self, _: &str) -> Result<()>;
     fn drop_module(&self, _: &str) -> Result<()>;
+    fn set_log_level(&self, _: Level) -> Result<()>;
+    fn set_module_log_level(&self, _: &str, _: Option<Level>) -> Result<()>;
     fn sql(&self) -> &Mutex<postgres::Client>;
 
     fn irc_send_privmsg(&self, _: &str, _: &str, _: &str) -> Result<()>;

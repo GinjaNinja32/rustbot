@@ -9,3 +9,4 @@ crate_type = ["dylib"]
 
 [dependencies]
 rustbot = { path = "../rustbot" }
+log = "0.4"

@@ -19,6 +19,9 @@ mod context;
 mod db;
 mod message;
 
+#[cfg(test)]
+mod test;
+
 fn main() {
     match bot::start() {
         Ok(()) => start_deadlock_monitor(),
@@ -26,6 +29,7 @@ fn main() {
     }
 }
 
+use log::warn;
 use parking_lot::deadlock;
 use std::{thread, time::Duration};
 
@@ -43,12 +47,12 @@ pub fn start_deadlock_monitor() {
             continue;
         }
 
-        println!("{} deadlocks detected", deadlocks.len());
+        warn!("{} deadlocks detected", deadlocks.len());
         for (i, threads) in deadlocks.iter().enumerate() {
-            println!("Deadlock #{}", i);
+            warn!("Deadlock #{}", i);
             for t in threads {
-                println!("Thread Id {:#?}", t.thread_id());
-                println!("{:#?}", t.backtrace());
+                warn!("Thread Id {:#?}", t.thread_id());
+                warn!("{:#?}", t.backtrace());
             }
         }
     }
