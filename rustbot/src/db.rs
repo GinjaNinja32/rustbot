@@ -18,21 +18,27 @@ fn migrate(pc: &config::Postgres) -> Result<String> {
             .database_password(&pc.password)
             .database_host(&pc.host)
             .database_port(pc.port)
-            .build()?,
+            .build()
+            .map_err(from_migrant)?,
     );
 
-    config.setup()?;
-    let config = config.reload()?;
+    config.setup().map_err(from_migrant)?;
+    let config = config.reload().map_err(from_migrant)?;
 
     info!("Applying all migrations...");
     migrant_lib::Migrator::with_config(&config)
         .direction(migrant_lib::Direction::Up)
         .all(true)
         .apply()
-        .or_else(|e| if e.is_migration_complete() { Ok(()) } else { Err(e) })?;
+        .or_else(|e| if e.is_migration_complete() { Ok(()) } else { Err(e) })
+        .map_err(from_migrant)?;
 
-    let config = config.reload()?;
-    migrant_lib::list(&config)?;
+    let config = config.reload().map_err(from_migrant)?;
+    migrant_lib::list(&config).map_err(from_migrant)?;
 
-    Ok(config.connect_string()?)
+    config.connect_string().map_err(from_migrant)
+}
+
+fn from_migrant(e: migrant_lib::Error) -> Error {
+    Error::msg(format!("{}", e))
 }

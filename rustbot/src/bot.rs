@@ -182,11 +182,27 @@ impl Rustbot {
     fn handle(&self, ctx: &context::Context, typ: HandleType, message: &str) {
         match self.handle_inner(ctx, typ, message) {
             Ok(()) => (),
-            Err(err) => {
-                if let Err(e) = ctx.say(&format!("command failed: {}", err)) {
-                    error!("failed to handle error: {}", e);
-                }
+            Err(err) => self.handle_err(ctx, err),
+        }
+    }
+    fn handle_err(&self, ctx: &context::Context, err: Error) {
+        match match err.downcast::<UserError>() {
+            Ok(ue) => {
+                // It's a UserError, so try to inform the user
+                ctx.say(&format!("command failed: {}", ue))
+                    .with_context(|| format!("failed to inform user of error {}", ue))
             }
+            Err(e) => {
+                // It's a backend error; let the user know _something_ happened, but print the main
+                // error only to the logs
+                error!("{:?}", e);
+                ctx.say("command failed")
+                    .context("failed to inform user of command failure")
+            }
+        } {
+            // If we failed to inform the user, log that so it's obvious what happened
+            Ok(_) => {}
+            Err(e) => error!("{:?}", e),
         }
     }
 
@@ -224,7 +240,8 @@ impl Rustbot {
                 let res = self.commands.read().get(&cmd).cloned();
                 if let Some((m, f)) = res {
                     if enabled.contains(&m) {
-                        f.call(ctx, &args)?;
+                        f.call(ctx, &args)
+                            .with_context(|| format!("failed to run command {:?}", cmd))?;
                     }
                 }
 
@@ -238,7 +255,8 @@ impl Rustbot {
                 m.rent::<_, Result<()>>(|meta| {
                     for (ty, handler) in &meta.handlers {
                         if ty.contains(typ) {
-                            handler(ctx, typ, message)?;
+                            handler(ctx, typ, message)
+                                .with_context(|| format!("failed to run handler for module {:?}", name))?;
                         }
                     }
                     Ok(())
@@ -266,7 +284,7 @@ impl Rustbot {
                 &[&cmd],
             )?;
             if rows.is_empty() {
-                return Err("failed to resolve alias: no result rows?".into());
+                bail!("failed to resolve alias: no result rows?");
             }
             let row = rows.get(0).unwrap();
 
@@ -459,7 +477,7 @@ impl types::Bot for Rustbot {
                     f(self)?;
                 }
                 for thread in meta.threads.drain(..) {
-                    thread.join().map_err(|e| format!("{:?}", e))?;
+                    thread.join().map_err(|e| Error::msg(format!("{:?}", e)))?;
                 }
                 Ok(())
             })?;
@@ -523,7 +541,7 @@ impl types::Bot for Rustbot {
             client.send_privmsg(channel, message).map_err(from_irc)?;
             Ok(())
         } else {
-            Err("invalid configid".into())
+            bail!("invalid configid")
         }
     }
 
@@ -533,13 +551,13 @@ impl types::Bot for Rustbot {
             client.send(line).map_err(from_irc)?;
             Ok(())
         } else {
-            Err("invalid configid".into())
+            bail!("invalid configid")
         }
     }
 
     fn dis_unprocess_message(&self, config: &str, guild: &str, message: &str) -> Result<String> {
         let cache_and_http = match self.caches.read().get(config) {
-            None => return Err(format!("no cache found for config {:?}", config).into()),
+            None => bail!("no cache found for config {:?}", config),
             Some(c) => Arc::clone(&c),
         };
 
@@ -561,7 +579,7 @@ impl types::Bot for Rustbot {
                 v
             }
         }
-        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "guild not found".into())?
+        .ok_or_else(|| Error::msg("guild not found"))?
         .read();
 
         let mut replacements = self.dis_get_replacements(guildobj, true);
@@ -583,7 +601,7 @@ impl types::Bot for Rustbot {
 
     fn dis_send_message(&self, config: &str, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
         let cache_and_http = match self.caches.read().get(config) {
-            None => return Err(format!("no cache found for config {:?}", config).into()),
+            None => bail!("no cache found for config {:?}", config),
             Some(c) => Arc::clone(&c),
         };
 
@@ -603,7 +621,7 @@ impl types::Bot for Rustbot {
                 v
             }
         }
-        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "guild not found".into())?
+        .ok_or_else(|| Error::msg("guild not found"))?
         .read();
 
         let chanid = {
@@ -624,7 +642,7 @@ impl types::Bot for Rustbot {
                 v
             }
         }
-        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "channel not found".into())?;
+        .ok_or_else(|| Error::msg("channel not found"))?;
 
         if process {
             let mut message = message.to_string();
@@ -681,7 +699,7 @@ impl types::Bot for Rustbot {
         } else if parts[0] == "dis" && parts.len() == 3 {
             self.dis_send_message(config, parts[1], parts[2], &message::format_discord(msg)?, true)
         } else {
-            Err("invalid source".into())
+            bail!("invalid source")
         }
     }
 }
@@ -934,7 +952,7 @@ rental! {
 }
 
 fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
-    let m = rent_module::Module::try_new_or_drop::<_, Box<dyn std::error::Error>>(Box::new(lib), |lib| unsafe {
+    let m = rent_module::Module::try_new_or_drop::<_, Error>(Box::new(lib), |lib| unsafe {
         match lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") {
             Ok(f) => {
                 let mut m = Meta::new();
@@ -948,10 +966,10 @@ fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
                         f(&mut m, c)?;
                         Ok(m)
                     } else {
-                        Err("required config not passed".into())
+                        bail!("required config not passed")
                     }
                 }
-                Err(e2) => Err(format!("{}, {}", e, e2).into()),
+                Err(e2) => bail!("{}, {}", e, e2),
             },
         }
     })?;
@@ -1000,6 +1018,6 @@ impl types::Meta for Meta {
     }
 }
 
-fn from_irc(e: ::irc::error::IrcError) -> Box<dyn std::error::Error> {
-    format!("{}", e).into()
+fn from_irc(e: ::irc::error::IrcError) -> Error {
+    Error::msg(format!("{}", e))
 }

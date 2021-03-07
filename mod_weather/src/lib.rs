@@ -39,13 +39,8 @@ impl Module {
         }
 
         let text = result.text()?;
-        let data: Response = match serde_json::from_str(&text) {
-            Err(e) => {
-                warn!("failed to unmarshal weather: {}:\n{}", e, text);
-                return Err(e.into());
-            }
-            Ok(v) => v,
-        };
+        let data: Response =
+            serde_json::from_str(&text).with_context(|| format!("failed to unmarshal weather: {}", text))?;
 
         let location = if let Some(country) = data.sys.country {
             format!("{}, {}", data.name, country)

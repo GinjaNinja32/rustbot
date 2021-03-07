@@ -82,7 +82,7 @@ fn recompile(ctx: &dyn Context, args: &str) -> Result<()> {
 fn set_enabled(ctx: &dyn Context, args: &str, target: bool) -> Result<()> {
     let a = args.split(' ').collect::<Vec<&str>>();
     if a.len() < 2 {
-        return Err("Usage: (enable/disable) config_id module [module [...]]".into());
+        bail_user!("Usage: (enable/disable) config_id module [module [...]]");
     }
 
     let config_id = a[0];
@@ -113,7 +113,7 @@ fn parse_log_level(s: &str) -> Result<Option<Level>> {
         "debug" => Level::Debug,
         "trace" => Level::Trace,
         "none" => return Ok(None),
-        _ => return Err("invalid log level specification".into()),
+        _ => bail_user!("invalid log level specification"),
     }))
 }
 
@@ -126,9 +126,9 @@ fn log(ctx: &dyn Context, args: &str) -> Result<()> {
         }
         [level] => match parse_log_level(level)? {
             Some(level) => ctx.bot().set_log_level(level)?,
-            None => return Err("invalid log level specification".into()),
+            None => bail_user!("invalid log level specification"),
         },
-        _ => return Err("unknown argument format; try 'log LEVEL' or 'log MODULE LEVEL'".into()),
+        _ => bail_user!("unknown argument format; try 'log LEVEL' or 'log MODULE LEVEL'"),
     }
     ctx.reply(Message::Simple("Done".to_string()))
 }

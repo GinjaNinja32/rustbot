@@ -13,13 +13,13 @@ pub fn get_meta(meta: &mut dyn Meta) {
 }
 
 fn cmd_dice(ctx: &dyn Context, args: &str) -> Result<()> {
-    let v = dice::parse(args)?;
+    let v = dice::parse(args).map_err(UserError::new)?;
     let limit = dice::limits::Limiter::new(10000);
-    let result = dice::eval(&v, limit)?;
+    let result = dice::eval(&v, limit).map_err(UserError::new)?;
     ctx.reply(Message::Spans(result))
 }
 
 fn cmd_swrpg(ctx: &dyn Context, args: &str) -> Result<()> {
-    let result = swrpg::parse_and_eval(args)?;
+    let result = swrpg::parse_and_eval(args).map_err(UserError::new)?;
     ctx.reply(Message::Spans(result))
 }

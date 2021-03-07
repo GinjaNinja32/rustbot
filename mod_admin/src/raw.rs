@@ -3,7 +3,7 @@ use rustbot::prelude::*;
 pub fn dmsg(ctx: &dyn Context, args: &str) -> Result<()> {
     let mut args: Vec<&str> = args.splitn(4, ' ').collect();
     if args.len() != 4 {
-        return Err("usage: dmsg <config_id> <guild> <channel> <message...>".into());
+        bail_user!("usage: dmsg <config_id> <guild> <channel> <message...>")
     }
 
     if args[2].chars().collect::<Vec<char>>()[0] == '#' {
@@ -16,7 +16,7 @@ pub fn dmsg(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn imsg(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 3 {
-        return Err("usage: imsg <config_id> <channel> <message...>".into());
+        bail_user!("usage: imsg <config_id> <channel> <message...>")
     }
 
     ctx.bot().irc_send_privmsg(args[0], args[1], args[2])
@@ -25,7 +25,7 @@ pub fn imsg(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn raw(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(2, ' ').collect();
     if args.len() != 2 {
-        return Err("usage: raw <config_id> <message...>".into());
+        bail_user!("usage: raw <config_id> <message...>")
     }
 
     ctx.bot().irc_send_raw(args[0], args[1])
@@ -34,7 +34,7 @@ pub fn raw(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
-        return Err("usage: join <config_id> <channel>".into());
+        bail_user!("usage: join <config_id> <channel>")
     }
 
     {
@@ -51,7 +51,7 @@ pub fn join(ctx: &dyn Context, args: &str) -> Result<()> {
 pub fn part(ctx: &dyn Context, args: &str) -> Result<()> {
     let args: Vec<&str> = args.splitn(3, ' ').collect();
     if args.len() != 2 {
-        return Err("usage: part <config_id> <channel>".into());
+        bail_user!("usage: part <config_id> <channel>")
     }
     {
         let mut db = ctx.bot().sql().lock();

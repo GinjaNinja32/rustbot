@@ -14,12 +14,11 @@ fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
         let parts: Vec<&str> = line.split(',').collect();
 
         if parts.len() != 4 {
-            return Err(format!(
+            bail!(
                 "got a wrong-size csv record? expected len=4, got len={} with {:?}",
                 parts.len(),
                 line,
-            )
-            .into());
+            );
         }
 
         let iata = parts[0]; // 3 letters

@@ -20,7 +20,7 @@ fn format_output(raw: &[u8], oneline: bool) -> Result<String> {
 
 fn do_bash(ctx: &dyn Context, args: &str, oneline: bool) -> Result<()> {
     if cfg!(target_os = "windows") {
-        return Err("unsupported".into());
+        bail_user!("unsupported");
     }
 
     let result = Command::new("bash").arg("-c").arg(args).output()?;
