@@ -779,7 +779,7 @@ pub fn start() -> Result<()> {
         .format(|w, now, record| {
             write!(
                 w,
-                "{} {} {:>mod_len$}:{}: {}",
+                "{} {:5} {:>mod_len$}:{}: {}",
                 now.now().format("%Y-%m-%d %H:%M:%S%.3f"),
                 record.level(),
                 record
