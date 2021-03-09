@@ -17,8 +17,8 @@ pub extern crate tokio;
 pub mod types;
 
 pub mod prelude {
-    pub use crate::async_thread;
     pub use crate::bail_user;
+    pub use crate::thread;
     pub use crate::types::*;
     pub use anyhow::Context as AnyhowContext; // would conflict with types::Context, but we just need the trait in scope here and don't care about names
     pub use anyhow::{bail, Error};
@@ -37,25 +37,22 @@ macro_rules! bail_user {
 }
 
 #[macro_export]
-macro_rules! async_thread {
-    ($meta:expr, $($code:tt)*) => {
-        {
-            let unload = $crate::types::Meta::on_unload_channel($meta);
-            $meta.thread(Box::new(|| {
-                let rt = $crate::tokio::runtime::Runtime::new().unwrap();
-                let res: $crate::types::Result<()> = rt
-                    .block_on(async {
-                        let s = async {
-                            $($code)*
-                        };
+macro_rules! thread {
+    ($meta:ident, async $code:block) => {{
+        let unload = $crate::types::Meta::on_unload_channel($meta);
+        $meta.thread(Box::new(|| {
+            let rt = $crate::tokio::runtime::Runtime::new().unwrap();
+            let res: $crate::types::Result<()> = rt
+                .block_on(async {
+                    let s = async { $code };
 
-                        $crate::futures::select! {
-                            r = $crate::futures::future::FutureExt::fuse(s) => r,
-                            _ = $crate::futures::future::FutureExt::fuse(unload) => Ok(()),
-                        }
-                    }).map_err(::std::convert::Into::into);
-                res.unwrap();
-            }));
-        }
-    }
+                    $crate::futures::select! {
+                        r = $crate::futures::future::FutureExt::fuse(s) => r,
+                        _ = $crate::futures::future::FutureExt::fuse(unload) => Ok(()),
+                    }
+                })
+                .map_err(::std::convert::Into::into);
+            res.unwrap();
+        }));
+    }};
 }

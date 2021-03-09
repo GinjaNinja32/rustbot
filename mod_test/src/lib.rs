@@ -32,7 +32,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
         }),
     );
 
-    async_thread! {meta,
+    thread!(meta, async {
         let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
         let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(hello_world)) });
@@ -40,7 +40,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
         let server = Server::bind(&addr).serve(make_svc);
 
         server.await
-    }
+    })
 }
 
 async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
