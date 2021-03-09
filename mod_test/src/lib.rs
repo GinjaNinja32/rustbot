@@ -1,5 +1,3 @@
-use futures::channel::oneshot::Receiver;
-use futures::prelude::future;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::convert::Infallible;
@@ -34,20 +32,15 @@ pub fn get_meta(meta: &mut dyn Meta) {
         }),
     );
 
-    let unload = meta.on_unload_channel();
+    async_thread! {meta,
+        let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
-    meta.thread(Box::new(|| helloworldserver(unload)));
-}
+        let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(hello_world)) });
 
-#[tokio::main]
-async fn helloworldserver(unload: Receiver<()>) {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+        let server = Server::bind(&addr).serve(make_svc);
 
-    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(hello_world)) });
-
-    let server = Server::bind(&addr).serve(make_svc);
-
-    future::select(unload, server).await;
+        server.await
+    }
 }
 
 async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
