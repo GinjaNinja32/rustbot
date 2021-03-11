@@ -257,6 +257,11 @@ pub enum Message<'a> {
     Spans(Vec<Span<'a>>),
     Prefixed(Vec<Span<'a>>, Vec<Span<'a>>),
     Code(String),
+    List {
+        prefix: Cow<'a, str>,
+        sep: Cow<'a, str>,
+        items: Vec<Cow<'a, str>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

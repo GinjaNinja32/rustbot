@@ -129,6 +129,29 @@ pub fn format_irc(m: Message) -> Result<Vec<String>> {
             }
             return Ok(vec);
         }
+        Message::List { prefix, sep, items } => {
+            let max_line_len = 300;
+
+            let mut lines = vec![];
+            let mut items: &[_] = &items;
+
+            while !items.is_empty() {
+                let mut current_length = prefix.len() + items[0].len();
+                let mut current_line: Vec<&str> = vec![&prefix, &items[0]];
+                items = &items[1..];
+
+                while !items.is_empty() && current_length + sep.len() + items[0].len() <= max_line_len {
+                    current_line.push(&sep);
+                    current_line.push(&items[0]);
+                    current_length += sep.len() + items[0].len();
+                    items = &items[1..];
+                }
+
+                lines.push(current_line.join(""));
+            }
+
+            lines.join("\n")
+        }
     };
 
     match paste_max_lines(msg, 3)? {
@@ -188,6 +211,7 @@ pub fn format_discord(m: Message) -> Result<String> {
             }
             return Ok(res.join("\n"));
         }
+        Message::List { prefix, sep, items } => (format!("{}{}", prefix, items.join(&sep)), false),
     };
 
     if code && !msg.contains('\n') {
