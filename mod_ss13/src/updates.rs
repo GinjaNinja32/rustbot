@@ -15,7 +15,7 @@ pub(crate) fn check_update(ctx: &dyn Context, args: &str) -> Result<()> {
     }
     let git = server.git_data.unwrap();
 
-    let resp = get_topic_map(server.address, b"revision")?;
+    let resp = get_topic_map(server.address.as_ref(), b"revision")?;
     let revision = match resp.get("revision") {
         Some(r) => r,
         None => bail_user!("server did not respond with a 'revision' key"),
@@ -23,7 +23,7 @@ pub(crate) fn check_update(ctx: &dyn Context, args: &str) -> Result<()> {
 
     let result = Command::new("./scripts/check_revision.sh")
         .arg(revision.as_ref())
-        .arg(&id)
+        .arg(id.as_ref())
         .arg(&git.0)
         .arg(&git.1)
         .output()?;
@@ -55,7 +55,7 @@ pub(crate) fn pull_repo(ctx: &dyn Context, args: &str) -> Result<()> {
     let git = server.git_data.unwrap();
 
     let result = Command::new("./scripts/pull_repo.sh")
-        .arg(&id)
+        .arg(id.as_ref())
         .arg(&git.0)
         .arg(&git.1)
         .output()?;

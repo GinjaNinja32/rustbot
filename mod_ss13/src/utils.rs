@@ -102,17 +102,19 @@ pub(crate) fn render_fields(data: &BTreeMap<String, Cow<'_, str>>, fields: &[(&s
     v.join(", ")
 }
 
-pub(crate) struct ResolvedServer {
-    pub(crate) id: Option<String>,
-    pub(crate) address: String,
+pub(crate) struct ResolvedServer<'a> {
+    pub(crate) prefix: Cow<'a, str>,
+    pub(crate) id: Option<Cow<'a, str>>,
+    pub(crate) address: Cow<'a, str>,
     pub(crate) git_data: Option<(String, String)>, // (repo_url, branch)
 }
 
-pub(crate) fn resolve_server(ctx: &dyn Context, args: &str) -> Result<ResolvedServer> {
+pub(crate) fn resolve_server<'a>(ctx: &dyn Context, args: &'a str) -> Result<ResolvedServer<'a>> {
     if let Some(s) = args.strip_prefix("byond://") {
         return Ok(ResolvedServer {
+            prefix: format!("(byond://{}) ", s).into(),
             id: None,
-            address: s.to_string(),
+            address: s.into(),
             git_data: None,
         });
     }
@@ -145,11 +147,16 @@ pub(crate) fn resolve_server(ctx: &dyn Context, args: &str) -> Result<ResolvedSe
     let repo_url: Option<String> = row.get(2);
     let branch: Option<String> = row.get(3);
 
-    return Ok(ResolvedServer {
-        id: Some(id),
-        address,
+    Ok(ResolvedServer {
+        prefix: if args.is_empty() {
+            "".into()
+        } else {
+            format!("({}) ", id).into()
+        },
+        id: Some(id.into()),
+        address: address.into(),
         git_data: repo_url.map(|ru| (ru, branch.unwrap())),
-    });
+    })
 }
 
 pub(crate) fn get_topic_map<A>(addr: A, msg: &[u8]) -> Result<BTreeMap<String, Cow<'static, str>>>
