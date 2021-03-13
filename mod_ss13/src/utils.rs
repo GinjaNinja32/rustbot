@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub(crate) enum TopicResponse {
@@ -17,6 +18,9 @@ where
     A: ToSocketAddrs,
 {
     let mut stream = TcpStream::connect(addr)?;
+
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
 
     let len = (msg.len() + 6) as u16;
     stream.write_all(&[0, 131, (len >> 8) as u8, len as u8, 0, 0, 0, 0, 0])?;
