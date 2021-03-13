@@ -138,9 +138,11 @@ pub(crate) fn resolve_server<'a>(ctx: &dyn Context, args: &'a str) -> Result<Res
     }
 
     let addr = if args.is_empty() {
+        let channel = format!("{}:{}", ctx.config_id(), ctx.source().channel_string());
+
         let addr = ctx.bot().sql().lock().query(
-            "SELECT id, addr, repo_url, branch FROM ss13_servers JOIN ss13_server_channels USING (id) LEFT JOIN ss13_repositories USING (id) WHERE channel = '$default' OR channel = $1 ORDER BY channel ASC NULLS LAST LIMIT 1",
-            &[&"asdf"],
+            "SELECT id, addr, repo_url, branch FROM ss13_servers JOIN ss13_server_channels USING (id) LEFT JOIN ss13_repositories USING (id) WHERE $1 LIKE channel ORDER BY channel DESC LIMIT 1",
+            &[&channel],
         )?;
         if addr.is_empty() {
             bail_user!("no server name passed and no default configured");
