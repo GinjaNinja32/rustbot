@@ -13,11 +13,29 @@ pub(crate) enum TopicResponse {
     Text(String),
 }
 
+fn connect<A>(addr: A) -> Result<TcpStream>
+where
+    A: ToSocketAddrs,
+{
+    let addrs = addr.to_socket_addrs()?;
+
+    for try_addr in addrs {
+        match TcpStream::connect_timeout(&try_addr, Duration::from_secs(5)) {
+            Ok(s) => return Ok(s),
+            Err(e) => {
+                warn!("failed to connect to {}: {}", try_addr, e);
+            }
+        }
+    }
+
+    bail!("all addresses failed")
+}
+
 pub(crate) fn topic<A>(addr: A, msg: &[u8]) -> Result<TopicResponse>
 where
     A: ToSocketAddrs,
 {
-    let mut stream = TcpStream::connect(addr)?;
+    let mut stream = connect(addr)?;
 
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
