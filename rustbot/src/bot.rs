@@ -220,13 +220,15 @@ impl Rustbot {
         };
 
         if typ.contains(HandleType::PlainMsg) {
-            let cmdchars: String = {
-                let mut db = ctx.bot().sql().lock();
-                let chars = db.query("SELECT cmdchars FROM configs WHERE id = $1", &[&ctx.config])?;
+            let cmdchars: Cow<'static, str> = {
+                let chars = ctx.bot().sql().lock().query(
+                    "SELECT cmdchars FROM cmdchars WHERE $1 LIKE channel ORDER BY channel DESC LIMIT 1",
+                    &[&ctx.source.channel_string()],
+                )?;
                 if chars.is_empty() {
-                    "".to_string()
+                    Cow::Borrowed("")
                 } else {
-                    chars.get(0).unwrap().get(0)
+                    Cow::Owned(chars.get(0).unwrap().get(0))
                 }
             };
 
