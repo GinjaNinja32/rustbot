@@ -222,8 +222,8 @@ impl Rustbot {
         if typ.contains(HandleType::PlainMsg) {
             let cmdchars: Cow<'static, str> = {
                 let chars = ctx.bot().sql().lock().query(
-                    "SELECT cmdchars FROM cmdchars WHERE $1 LIKE channel ORDER BY channel DESC LIMIT 1",
-                    &[&ctx.source.channel_string()],
+                    "SELECT cmdchars FROM cmdchars WHERE config_id = $1 AND $2 LIKE channel ORDER BY channel DESC LIMIT 1",
+                    &[&ctx.config, &ctx.source.channel_string()],
                 )?;
                 if chars.is_empty() {
                     Cow::Borrowed("")
