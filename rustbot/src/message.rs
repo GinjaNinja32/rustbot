@@ -75,7 +75,7 @@ fn render_irc(spans: Vec<Span>) -> String {
                             }
                         }
                         _ => {
-                            let code = format!("\03{:02}", color as u8);
+                            let code = format!("\x03{:02}", color as u8);
                             st.push_str(&code);
                             if format == fmt && text.starts_with(',') {
                                 st.push_str("\x02\x02");
