@@ -272,7 +272,7 @@ impl DiceOptions {
     fn is_empty(&self) -> bool {
         match self {
             Self::Vector(v) => v.is_empty(),
-            Self::Range(lo, hi) => hi <= lo,
+            Self::Range(lo, hi) => hi < lo,
         }
     }
     fn get_max_value(&self) -> i64 {
@@ -292,6 +292,17 @@ impl DiceOptions {
             Self::Vector(v) => v.len() as u64,
             Self::Range(lo, hi) => (hi - lo + 1) as u64,
         }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.is_empty() {
+            return Err("tried to roll a die with no options".to_string());
+        }
+        if let Self::Range(_, i64::MAX) = self {
+            return Err("tried to roll a d(2^63 - 1)".to_string());
+        }
+
+        return Ok(());
     }
 }
 
@@ -333,9 +344,7 @@ impl DiceRoll {
                     None => (vec![], DiceOptions::Range(1, 6)),
                 };
 
-                if s.is_empty() {
-                    return Err("tried to roll a die with no options".to_string());
-                }
+                s.validate()?;
 
                 let mut n = c as usize;
                 let target = match ex {

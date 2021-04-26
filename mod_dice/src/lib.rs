@@ -13,6 +13,11 @@ pub fn get_meta(meta: &mut dyn Meta) {
 }
 
 fn cmd_dice(ctx: &dyn Context, args: &str) -> Result<()> {
+    if args.trim().is_empty() {
+        return ctx.reply(Message::Simple(
+            "Usage: dice <roll>; try '1d6', '2d20H1', '2d6>7'".to_string(),
+        ));
+    }
     let v = dice::parse(args).map_err(UserError::new)?;
     let limit = dice::limits::Limiter::new(10000);
     let result = dice::eval(&v, limit).map_err(UserError::new)?;
