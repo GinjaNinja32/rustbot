@@ -1,6 +1,7 @@
 use crate::build_message;
 use crate::utils::*;
 use rustbot::prelude::*;
+use rustbot::{span, spans};
 use std::collections::BTreeMap;
 
 pub(crate) fn status(ctx: &dyn Context, args: &str) -> Result<()> {
@@ -130,16 +131,16 @@ pub(crate) fn manifest(ctx: &dyn Context, args: &str) -> Result<()> {
     } else {
         let mut lines = vec![];
         for (dept, list) in resp {
-            lines.push(format!(
-                "{}{}: {}",
-                server.prefix,
-                dept,
+            lines.push(spans![
+                server.prefix.as_ref(),
+                span!(Format::Bold; dept),
+                ": ",
                 list.iter()
                     .map(|(name, job)| format!("{}: {}", name, job))
                     .collect::<Vec<_>>()
                     .join("; ")
-            ));
+            ]);
         }
-        ctx.reply(Message::Simple(lines.join("\n")))
+        ctx.reply(Message::Spans(span_join(lines, "\n")))
     }
 }
