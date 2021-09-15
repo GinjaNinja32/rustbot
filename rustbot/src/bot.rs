@@ -660,24 +660,41 @@ impl types::Bot for Rustbot {
             });
 
             {
-                lazy_static! {
-                    static ref REGEX_CACHE: Mutex<BTreeMap<String, Regex>> = Mutex::new(BTreeMap::new());
-                }
-
-                let mut cache = REGEX_CACHE.lock();
-
                 for (find, replace) in replacements {
-                    let re = if let Some(re) = cache.get(&find) {
-                        re
-                    } else {
-                        let re = Regex::new(&format!(r"{}($|[\pP\pZ])", regex::escape(&find)))?;
-                        cache.entry(find).or_insert(re)
+                    let mut need_replace = false;
+
+                    let is_replace_before_ok = |c| {
+                        let cat = unic_ucd::GeneralCategory::of(c);
+
+                        cat.is_separator() || cat.is_punctuation()
                     };
 
-                    if let Cow::Owned(s) = re.replace_all(&message, |captures: &regex::Captures| {
-                        format!("{}{}", replace, captures.get(1).unwrap().as_str())
-                    }) {
-                        message = s.to_string();
+                    // Check whether we actually need to do anything.
+                    // Most of the time, we don't, so we can avoid allocating.
+                    if message.ends_with(&find) {
+                        need_replace = true;
+                    } else {
+                        for part in message.split(&find).skip(1) {
+                            if part.starts_with(is_replace_before_ok) {
+                                need_replace = true;
+                            }
+                        }
+                    }
+
+                    if need_replace {
+                        let mut parts = message.split(&find);
+                        let mut new_parts = vec![parts.next().unwrap()];
+
+                        for part in parts {
+                            if part.is_empty() || part.starts_with(is_replace_before_ok) {
+                                new_parts.push(&replace);
+                            } else {
+                                new_parts.push(&find);
+                            }
+                            new_parts.push(part);
+                        }
+
+                        message = new_parts.join("");
                     }
                 }
             }
