@@ -44,7 +44,7 @@ impl Module {
 
         let location = if let Some(country) = data.sys.country {
             format!("{}, {}", data.name, country)
-        } else if data.name != "" {
+        } else if !data.name.is_empty() {
             data.name
         } else {
             "unknown location".to_string()
@@ -89,6 +89,7 @@ impl Module {
     }
 }
 
+#[allow(clippy::manual_range_contains)]
 fn text_for_angle(angle: f64) -> String {
     if angle < 0.0 || angle > 360.0 {
         "unknown".to_string()

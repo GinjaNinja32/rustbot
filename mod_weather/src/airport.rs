@@ -7,7 +7,7 @@ fn parse_airports(data: &'static str) -> Result<BTreeMap<String, Coords>> {
     let mut result: BTreeMap<String, Coords> = BTreeMap::new();
 
     for line in data.split('\n') {
-        if line == "" {
+        if line.is_empty() {
             continue;
         }
 

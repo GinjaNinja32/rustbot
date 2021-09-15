@@ -24,7 +24,7 @@ lazy_static! {
 
 fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
     let mut db = ctx.bot().sql().lock();
-    if args == "" {
+    if args.is_empty() {
         let key = db.query(
             "SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2",
             &[&ctx.config_id(), &ctx.source().channel_string()],
@@ -86,7 +86,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
         return Ok(());
     }
 
-    let (user, spans): (&dyn for<'a> Fn(Cow<'a, str>) -> Span<'a>, Vec<Span>) =
+    let (user, spans): (&dyn Fn(Cow<'_, str>) -> Span<'_>, Vec<Span>) =
         if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
             (
                 &|user| span!(Format::Bold; "<{}>", user),

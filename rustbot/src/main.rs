@@ -1,6 +1,4 @@
 extern crate irc;
-#[macro_use]
-extern crate lazy_static;
 extern crate libloading;
 extern crate migrant_lib;
 extern crate parking_lot;
