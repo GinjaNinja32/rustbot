@@ -71,15 +71,17 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
 }
 
 fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
-    let mut db = ctx.bot().sql().lock();
-
     let conf = ctx.config_id();
     let chan = ctx.source().channel_string();
 
-    let chans = db.query(
-        "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
-        &[&conf, &chan],
-    )?;
+    let chans = {
+        let mut db = ctx.bot().sql().lock();
+
+        db.query(
+            "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
+            &[&conf, &chan]
+        )?
+    };
     if chans.is_empty() {
         return Ok(());
     }
