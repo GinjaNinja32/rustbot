@@ -13,6 +13,11 @@ extern crate serde;
 extern crate serde_json;
 extern crate serenity;
 
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 mod bot;
 mod config;
 mod context;
