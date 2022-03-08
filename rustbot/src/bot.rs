@@ -158,6 +158,16 @@ impl Rustbot {
                 if let Some(description) = embed.description {
                     data.append(&mut description.split('\n').map(str::to_string).collect());
                 }
+                for field in embed.fields {
+                    if field.inline {
+                        data.push(format!("{}: {}", field.name, field.value.replace("\n", "\t")))
+                    } else {
+                        data.push(format!("{}:", field.name));
+                        for line in field.value.split("\n") {
+                            data.push(format!("\t{}", line));
+                        }
+                    }
+                }
 
                 if data.is_empty() {
                     continue;
