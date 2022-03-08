@@ -35,6 +35,8 @@ pub struct Rustbot {
     modules: RwLock<BTreeMap<String, Module>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
     logger: Mutex<LogInfo>,
+
+    suppress_errors: RwLock<BTreeMap<String, Instant>>,
 }
 
 struct LogInfo {
@@ -257,7 +259,7 @@ impl Rustbot {
                 m.rent::<_, Result<()>>(|meta| {
                     for (ty, handler) in &meta.handlers {
                         if ty.contains(typ) {
-                            handler(ctx, typ, message)
+                            self.maybe_ignore_err(&name, handler(ctx, typ, message), ())
                                 .with_context(|| format!("failed to run handler for module {:?}", name))?;
                         }
                     }
@@ -267,6 +269,25 @@ impl Rustbot {
         }
 
         Ok(())
+    }
+
+    fn maybe_ignore_err<T>(&self, name: &str, res: Result<T>, on_ignore: T) -> Result<T> {
+        match self.suppress_errors.read().get(name) {
+            None => res,
+            Some(t) => {
+                if *t < Instant::now() {
+                    res
+                } else {
+                    match res {
+                        Ok(t) => Ok(t),
+                        Err(e) => {
+                            warn!("suppressing error from {}: {}", name, e);
+                            Ok(on_ignore)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn resolve_alias(&self, cmd: &str, args: &str) -> Result<(String, String)> {
@@ -721,6 +742,10 @@ impl types::Bot for Rustbot {
             bail!("invalid source")
         }
     }
+
+    fn suppress_errors(&self, module: String, until: Instant) {
+        self.suppress_errors.write().insert(module, until);
+    }
 }
 
 const LOG_MODULE_PATH_MAX_LEN: usize = 25;
@@ -825,6 +850,7 @@ pub fn start() -> Result<()> {
             logger,
             current_level: Level::Info,
         }),
+        suppress_errors: RwLock::new(BTreeMap::new()),
     });
 
     b.update_logger_spec()?;

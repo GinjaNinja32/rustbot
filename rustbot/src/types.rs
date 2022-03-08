@@ -136,6 +136,8 @@ pub trait Bot {
     fn dis_send_message(&self, _: &str, _: &str, _: &str, _: &str, _: bool) -> Result<()>;
 
     fn send_message(&self, _: &str, _: &str, _: Message) -> Result<()>;
+
+    fn suppress_errors(&self, _: String, _: std::time::Instant);
 }
 
 pub trait Context {

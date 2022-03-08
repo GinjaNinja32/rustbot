@@ -2,6 +2,7 @@ use log::Level;
 use rustbot::prelude::*;
 use std::process::Command as ProcessCommand;
 use std::str;
+use std::time::{Duration, Instant};
 
 #[no_mangle]
 pub fn get_meta(meta: &mut dyn Meta) {
@@ -10,6 +11,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("reload", Command::new(reload).req_perms(Perms::Modules));
     meta.cmd("recompile", Command::new(recompile).req_perms(Perms::Modules));
     meta.cmd("log", Command::new(log).req_perms(Perms::Modules));
+    meta.cmd("suppress", Command::new(suppress).req_perms(Perms::Modules));
     meta.cmd(
         "enable",
         Command::new(move |ctx, args| set_enabled(ctx, args, true)).req_perms(Perms::Modules),
@@ -115,6 +117,24 @@ fn parse_log_level(s: &str) -> Result<Option<Level>> {
         "none" => return Ok(None),
         _ => bail_user!("invalid log level specification"),
     }))
+}
+
+fn suppress(ctx: &dyn Context, args: &str) -> Result<()> {
+    let a = args.split(' ').collect::<Vec<&str>>();
+    if a.len() != 2 {
+        bail_user!("Usage: suppress <module> <seconds>");
+    }
+
+    let module = a[0].to_string();
+    let seconds = match a[1].parse::<u64>() {
+        Ok(v) => v,
+        Err(e) => bail_user!("invalid duration: {}", e),
+    };
+
+    let ts = Instant::now() + Duration::from_secs(seconds);
+
+    ctx.bot().suppress_errors(module, ts);
+    ctx.reply(Message::Simple("Done.".to_string()))
 }
 
 fn log(ctx: &dyn Context, args: &str) -> Result<()> {
