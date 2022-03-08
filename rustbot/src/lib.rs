@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate bitflags;
 extern crate regex;
+#[macro_use]
+extern crate nom;
 
 // These may or may not be used in librustbot itself, but they're each used by one or more modules;
 // these these declarations force the compiler to put them in librustbot.so rather than duplicating
@@ -15,13 +17,15 @@ pub extern crate futures;
 pub extern crate tokio;
 
 pub mod types;
+pub mod utils;
 
 pub mod prelude {
     pub use crate::bail_user;
     pub use crate::thread;
     pub use crate::types::*;
+    pub use crate::utils::*;
     pub use anyhow::Context as AnyhowContext; // would conflict with types::Context, but we just need the trait in scope here and don't care about names
-    pub use anyhow::{bail, Error};
+    pub use anyhow::{anyhow, bail, Error};
     pub use log::{debug, error, info, trace, warn};
 }
 

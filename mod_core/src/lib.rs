@@ -2,7 +2,7 @@ use log::Level;
 use rustbot::prelude::*;
 use std::process::Command as ProcessCommand;
 use std::str;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[no_mangle]
 pub fn get_meta(meta: &mut dyn Meta) {
@@ -126,12 +126,8 @@ fn suppress(ctx: &dyn Context, args: &str) -> Result<()> {
     }
 
     let module = a[0].to_string();
-    let seconds = match a[1].parse::<u64>() {
-        Ok(v) => v,
-        Err(e) => bail_user!("invalid duration: {}", e),
-    };
-
-    let ts = Instant::now() + Duration::from_secs(seconds);
+    let duration = parse_duration(a[1])?;
+    let ts = Instant::now() + duration;
 
     ctx.bot().suppress_errors(module, ts);
     ctx.reply(Message::Simple("Done.".to_string()))
