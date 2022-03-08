@@ -68,7 +68,7 @@ fn render_irc(spans: Vec<Span>) -> String {
                 if color != col {
                     match color {
                         Color::None => {
-                            if format == fmt && text.starts_with(|c| '0' <= c && c <= '9') {
+                            if format == fmt && text.starts_with(|c: char| c.is_ascii_digit()) {
                                 st.push_str("\x03\x02\x02")
                             } else {
                                 st.push('\x03')

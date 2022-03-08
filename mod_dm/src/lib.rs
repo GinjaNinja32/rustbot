@@ -73,7 +73,7 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
         let setup = &main_lines[0..main_lines.len() - 1];
 
         let mut value = main_lines[main_lines.len() - 1].to_string();
-        if value != "" {
+        if !value.is_empty() {
             value = format!(
                 "var/result = ({})\n    world.log << \"[istype(result, /list) ? json_encode(result) : result]\"",
                 value
@@ -112,9 +112,9 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
         .output()?;
 
     let stdout = String::from_utf8(result.stdout)?;
-    if stdout == "" {
+    if stdout.is_empty() {
         let stderr = String::from_utf8(result.stderr)?;
-        if stderr == "" {
+        if stderr.is_empty() {
             ctx.say("<no output>")
         } else {
             ctx.reply(Message::Code(stderr))

@@ -355,7 +355,7 @@ where
     v
 }
 
-pub fn span_split<'a>(spans: Vec<Span<'a>>, sep: char) -> Vec<Vec<Span<'a>>> {
+pub fn span_split(spans: Vec<Span<'_>>, sep: char) -> Vec<Vec<Span<'_>>> {
     let mut ret = vec![];
     let mut cur = vec![];
 
@@ -376,13 +376,12 @@ pub fn span_split<'a>(spans: Vec<Span<'a>>, sep: char) -> Vec<Vec<Span<'a>>> {
                 });
                 for part in &parts[1..] {
                     ret.push(cur);
-                    cur = vec![];
-                    cur.push(Span::Text {
+                    cur = vec![Span::Text {
                         text: (*part).to_string().into(),
                         format,
                         color,
                         bg,
-                    });
+                    }];
                 }
             }
             Span::DiscordEmoji { .. } => {

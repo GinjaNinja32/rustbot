@@ -302,7 +302,7 @@ impl DiceOptions {
             return Err("tried to roll a d(2^63 - 1)".to_string());
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -628,7 +628,7 @@ fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'stat
 impl ModOp {
     fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
         let mut l = left.to_int_slice()?;
-        l.sort();
+        l.sort_unstable();
         let r = right.to_int()? as usize;
         if r > l.len() {
             return Err(format!(
@@ -664,9 +664,5 @@ impl Display for ModOp {
 }
 
 named!(number<&str, i64>,
-    map_res!(take_while!(is_digit), |s: &str| s.parse::<i64>())
+    map_res!(take_while!(|c: char| c.is_ascii_digit()), |s: &str| s.parse::<i64>())
 );
-
-fn is_digit(c: char) -> bool {
-    '0' <= c && c <= '9'
-}

@@ -69,7 +69,7 @@ fn recompile(ctx: &dyn Context, args: &str) -> Result<()> {
                     if line.starts_with("   Compiling") {
                         continue;
                     }
-                    if line == "" {
+                    if line.is_empty() {
                         break;
                     }
                     lines.push(line);

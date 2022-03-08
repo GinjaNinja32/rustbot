@@ -24,7 +24,7 @@ lazy_static! {
 
 fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
     let mut db = ctx.bot().sql().lock();
-    if args == "" {
+    if args.is_empty() {
         let key = db.query(
             "SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2",
             &[&ctx.config_id(), &ctx.source().channel_string()],
@@ -71,20 +71,22 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
 }
 
 fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
-    let mut db = ctx.bot().sql().lock();
-
     let conf = ctx.config_id();
     let chan = ctx.source().channel_string();
 
-    let chans = db.query(
-        "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
-        &[&conf, &chan],
-    )?;
+    let chans = {
+        let mut db = ctx.bot().sql().lock();
+
+        db.query(
+            "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
+            &[&conf, &chan]
+        )?
+    };
     if chans.is_empty() {
         return Ok(());
     }
 
-    let (user, spans): (&dyn for<'a> Fn(Cow<'a, str>) -> Span<'a>, Vec<Span>) =
+    let (user, spans): (&dyn Fn(Cow<'_, str>) -> Span<'_>, Vec<Span>) =
         if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
             (
                 &|user| span!(Format::Bold; "<{}>", user),
