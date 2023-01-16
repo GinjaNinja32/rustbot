@@ -78,7 +78,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
         let mut db = ctx.bot().sql().lock();
 
         db.query(
-            "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND config_id != $1 AND channel_id != $2",
+            "SELECT config_id, channel_id FROM mod_bridge WHERE bridge_key = (SELECT bridge_key FROM mod_bridge WHERE config_id = $1 AND channel_id = $2) AND (config_id != $1 OR channel_id != $2)",
             &[&conf, &chan]
         )?
     };
