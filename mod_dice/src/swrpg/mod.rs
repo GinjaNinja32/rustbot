@@ -2,24 +2,10 @@ use rand::seq::SliceRandom;
 use rustbot::prelude::{span_join, Format, Span};
 use rustbot::{span, spans};
 
-mod emoji;
+use nom::{branch::*, bytes::complete::*, combinator::*, multi::*, sequence::*};
+use nom::{IResult, Parser};
 
-named!(space<&str,&str>, eat_separator!(" \t"));
-macro_rules! sp (
-  ($i:expr, $($args:tt)*) => (
-    {
-      match sep!($i, space, $($args)*) {
-        Err(e) => Err(e),
-        Ok((i1,o))    => {
-          match space(i1) {
-            Err(e) => Err(e),
-            Ok((i2,_))    => Ok((i2, o))
-          }
-        }
-      }
-    }
-  )
-);
+mod emoji;
 
 fn format_dice<'a>(
     n: i8,
@@ -148,37 +134,46 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
     })
 }
 
-named!(line<&str, Dice>, do_parse!(
-    dice: many1!(tuple!(number, die)) >>
-    extra: opt!(do_parse!(
-        tag!("+") >>
-        e: many0!(tuple!(number, extra_die)) >>
-        (e)
-    )) >>
-    tag!("\n") >>
-    ( Dice({let mut v = vec![]; v.extend_from_slice(&dice); if let Some(e) = extra { v.extend_from_slice(&e) }; v}) )
-));
+fn line(i: &str) -> IResult<&str, Dice> {
+    let (i, dice): (_, Vec<_>) = many1(tuple((number, die)))(i)?;
+    let (i, extra): (_, Option<Vec<_>>) = opt(preceded(tag("+"), many0(tuple((number, extra_die)))))(i)?;
+    let (i, _) = eof(i)?;
 
+    let dice = {
+        let mut v = vec![];
+        v.extend_from_slice(&dice);
+        if let Some(e) = extra {
+            v.extend_from_slice(&e)
+        };
+        v
+    };
+
+    Ok((i, Dice(dice)))
+}
 struct Dice(Vec<(u8, Die)>);
 
-named!(die<&str, Die>, sp!(alt!(
-    value!(Die::Boost,       alt!(tag!("B") | tag!("b"))) | // boost, blue
-    value!(Die::Setback,     alt!(tag!("S") | tag!("s"))) | // setback, black
-    value!(Die::Ability,     alt!(tag!("A") | tag!("g"))) | // ability, green
-    value!(Die::Difficulty,  alt!(tag!("D") | tag!("p"))) | // difficulty, purple
-    value!(Die::Proficiency, alt!(tag!("P") | tag!("y"))) | // proficiency, yellow
-    value!(Die::Challenge,   alt!(tag!("C") | tag!("r"))) | // challenge, red
-    value!(Die::Force,       alt!(tag!("F") | tag!("w")))   // force, white
-)));
+fn die(i: &str) -> IResult<&str, Die> {
+    alt((
+        alt((tag("B"), tag("b"))).map(|_| Die::Boost),       // boost, blue
+        alt((tag("S"), tag("s"))).map(|_| Die::Setback),     // setback, black
+        alt((tag("A"), tag("g"))).map(|_| Die::Ability),     // ability, green
+        alt((tag("D"), tag("p"))).map(|_| Die::Difficulty),  // difficulty, purple
+        alt((tag("P"), tag("y"))).map(|_| Die::Proficiency), // proficiency, yellow
+        alt((tag("C"), tag("r"))).map(|_| Die::Challenge),   // challenge, red
+        alt((tag("F"), tag("w"))).map(|_| Die::Force),       // force, white
+    ))(i)
+}
 
-named!(extra_die<&str, Die>, sp!(alt!(
-    value!(Die::AddSuccess,   alt!(tag!("S") | tag!("s"))) |
-    value!(Die::AddFailure,   alt!(tag!("F") | tag!("f"))) |
-    value!(Die::AddAdvantage, alt!(tag!("A") | tag!("a"))) |
-    value!(Die::AddTriumph,   alt!(tag!("TR") | tag!("tr"))) | // must precede threat
-    value!(Die::AddThreat,    alt!(tag!("T") | tag!("t"))) |
-    value!(Die::AddDespair,   alt!(tag!("D") | tag!("d")))
-)));
+fn extra_die(i: &str) -> IResult<&str, Die> {
+    alt((
+        alt((tag("S"), tag("s"))).map(|_| Die::AddSuccess),
+        alt((tag("F"), tag("f"))).map(|_| Die::AddFailure),
+        alt((tag("A"), tag("a"))).map(|_| Die::AddAdvantage),
+        alt((tag("TR"), tag("tr"))).map(|_| Die::AddTriumph), // must precede threat
+        alt((tag("T"), tag("t"))).map(|_| Die::AddThreat),
+        alt((tag("D"), tag("d"))).map(|_| Die::AddDespair),
+    ))(i)
+}
 
 #[derive(Copy, Clone)]
 enum Die {
@@ -359,10 +354,6 @@ const DR_LIGHT: DiceResult = DiceResult { light: 1, ..DR_ZERO };
 
 const DR_DARK: DiceResult = DiceResult { dark: 1, ..DR_ZERO };
 
-named!(number<&str, u8>,
-    map_res!(take_while!(is_digit), |s: &str| if s.is_empty() { Ok(1) } else { s.parse::<u8>() })
-);
-
-fn is_digit(c: char) -> bool {
-    ('0'..'9').contains(&c)
+fn number(i: &str) -> IResult<&str, u8> {
+    map_res(take_while(|c: char| c.is_ascii_digit()), |s: &str| s.parse())(i)
 }

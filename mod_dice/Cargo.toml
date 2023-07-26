@@ -9,5 +9,5 @@ crate_type = ["dylib"]
 
 [dependencies]
 rustbot = { path = "../rustbot" }
-nom = "^4.2"
+nom = "^7.1"
 rand = "0.6.5"

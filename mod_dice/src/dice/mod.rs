@@ -39,9 +39,7 @@ pub trait Evaluable {
 }
 
 pub fn parse(input: &str) -> Result<ast::Expression, String> {
-    ast::fullexpr(&format!("{}\n", input))
-        .map(|(_, c)| c)
-        .map_err(|e| format!("{:?}", e))
+    ast::fullexpr(input).map(|(_, c)| c).map_err(|e| format!("{:?}", e))
 }
 
 pub fn eval(expr: &ast::Expression, mut limit: limits::Limiter) -> Result<Vec<Span>, String> {

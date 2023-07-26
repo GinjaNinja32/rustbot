@@ -10,31 +10,30 @@ use super::limits::Limiter;
 use super::value::Value;
 use super::Evaluable;
 
-// space eater
-named!(space<&str,&str>, eat_separator!(" \t"));
-macro_rules! sp (
-  ($i:expr, $($args:tt)*) => (
-    {
-      match sep!($i, space, $($args)*) {
-        Err(e) => Err(e),
-        Ok((i1,o))    => {
-          match space(i1) {
-            Err(e) => Err(e),
-            Ok((i2,_))    => Ok((i2, o))
-          }
-        }
-      }
-    }
-  )
-);
+use nom::{branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*};
+use nom::{error::ParseError, IResult, Parser};
 
-named!(pub fullexpr<&str, Expression>,
-    terminated!(expression, tag!("\n"))
-);
+/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
+/// trailing whitespace, returning the output of `inner`.
+fn ws<'a, F: 'a, O, E: ParseError<&'a str>>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+where
+    F: Fn(&'a str) -> IResult<&'a str, O, E>,
+{
+    delimited(multispace0, inner, multispace0)
+}
 
-named!(expression<&str, Expression>,
-    map!(repeat, |v| Expression{expr: v})
-);
+pub fn fullexpr(i: &str) -> IResult<&str, Expression> {
+    let (i, e) = expression(i)?;
+    let (i, _) = eof(i)?;
+
+    Ok((i, e))
+}
+
+fn expression(i: &str) -> IResult<&str, Expression> {
+    let (i, r) = ws(repeat)(i)?;
+
+    Ok((i, Expression { expr: r }))
+}
 #[derive(Debug)]
 pub struct Expression {
     pub expr: Repeat, // ...
@@ -45,15 +44,12 @@ impl Evaluable for Expression {
     }
 }
 
-named!(repeat<&str, Repeat>, sp!(alt!(
-    do_parse!(
-        n: number >>
-        tag!("#") >>
-        c: comparison >>
-        (Repeat{ repeat: Some(n), term: c })
-    ) |
-    map!(comparison, |v| Repeat{ repeat: None, term: v })
-)));
+fn repeat(i: &str) -> IResult<&str, Repeat> {
+    alt((
+        tuple((number, ws(tag("#")), comparison)).map(|(r, _, term)| Repeat { repeat: Some(r), term }),
+        comparison.map(|term| Repeat { repeat: None, term }),
+    ))(i)
+}
 #[derive(Debug)]
 pub struct Repeat {
     pub repeat: Option<i64>, // ( integer "#" )?
@@ -79,11 +75,12 @@ impl Evaluable for Repeat {
     }
 }
 
-named!(comparison<&str, Comparison>, sp!(do_parse!(
-    l: addsub >>
-    r: opt!(tuple!(compare_op, addsub)) >>
-    (Comparison{left: l, right: r})
-)));
+fn comparison(i: &str) -> IResult<&str, Comparison> {
+    let (i, left) = addsub(i)?;
+    let (i, right) = opt(tuple((ws(compare_op), addsub)))(i)?;
+
+    Ok((i, Comparison { left, right }))
+}
 #[derive(Debug)]
 pub struct Comparison {
     pub left: AddSub,                       // ...
@@ -104,11 +101,12 @@ impl Evaluable for Comparison {
     }
 }
 
-named!(addsub<&str, AddSub>, sp!(do_parse!(
-    l: muldiv >>
-    r: many0!(tuple!(addsub_op, muldiv)) >>
-    (AddSub{left: l, right: r})
-)));
+fn addsub(i: &str) -> IResult<&str, AddSub> {
+    let (i, left) = muldiv(i)?;
+    let (i, right) = many0(tuple((ws(addsub_op), muldiv)))(i)?;
+
+    Ok((i, AddSub { left, right }))
+}
 #[derive(Debug)]
 pub struct AddSub {
     pub left: MulDiv,                   // ...
@@ -129,11 +127,12 @@ impl Evaluable for AddSub {
     }
 }
 
-named!(muldiv<&str, MulDiv>, sp!(do_parse!(
-    l: sum >>
-    r: many0!(tuple!(muldiv_op, sum)) >>
-    (MulDiv{left: l, right: r})
-)));
+fn muldiv(i: &str) -> IResult<&str, MulDiv> {
+    let (i, left) = sum(i)?;
+    let (i, right) = many0(tuple((ws(muldiv_op), sum)))(i)?;
+
+    Ok((i, MulDiv { left, right }))
+}
 #[derive(Debug)]
 pub struct MulDiv {
     pub left: Sum,                   // ...
@@ -154,11 +153,13 @@ impl Evaluable for MulDiv {
     }
 }
 
-named!(sum<&str, Sum>, sp!(do_parse!(
-    s: alt!(value!(true, tag!("s")) | value!(false)) >>
-    t: dicemod >>
-    (Sum{is_sum: s, term: t})
-)));
+fn sum(i: &str) -> IResult<&str, Sum> {
+    let (i, is_sum) = opt(tag("s")).map(|o| o.is_some()).parse(i)?;
+    let (i, _) = multispace0(i)?;
+    let (i, term) = dicemod(i)?;
+
+    Ok((i, Sum { is_sum, term }))
+}
 #[derive(Debug)]
 pub struct Sum {
     pub is_sum: bool,  // ( "s" )?
@@ -175,11 +176,12 @@ impl Evaluable for Sum {
     }
 }
 
-named!(dicemod<&str, DiceMod>, sp!(do_parse!(
-    r: diceroll >>
-    o: opt!(tuple!(dicemod_op, value)) >>
-    (DiceMod{roll: r, op: o})
-)));
+fn dicemod(i: &str) -> IResult<&str, DiceMod> {
+    let (i, roll) = diceroll(i)?;
+    let (i, op) = opt(tuple((ws(dicemod_op), value)))(i)?;
+
+    Ok((i, DiceMod { roll, op }))
+}
 #[derive(Debug)]
 pub struct DiceMod {
     pub roll: DiceRoll,                // ...
@@ -207,14 +209,17 @@ impl Evaluable for DiceMod {
     }
 }
 
-named!(explode<&str, Explode>, sp!(alt!(
-    do_parse!(
-        tag!("!") >>
-        n: number >>
-        (Explode::Target(n))
-    ) |
-    value!(Explode::Default, tag!("!"))
-)));
+fn explode(i: &str) -> IResult<&str, Explode> {
+    let (i, n) = preceded(tag("!"), opt(preceded(multispace0, number)))(i)?;
+
+    let res = if let Some(n) = n {
+        Explode::Target(n)
+    } else {
+        Explode::Default
+    };
+
+    Ok((i, res))
+}
 #[derive(Debug)]
 pub enum Explode {
     Default,
@@ -229,16 +234,17 @@ impl Display for Explode {
     }
 }
 
-named!(diceroll<&str, DiceRoll>, sp!(alt!(
-    do_parse!(
-        c: opt!(value) >>
-        tag!("d") >>
-        s: opt!(value) >>
-        e: opt!(explode) >>
-        (DiceRoll::Roll{count: c, sides: s, explode: e})
-    ) |
-    map!(value, |v| DiceRoll::NoRoll(v))
-)));
+fn diceroll(i: &str) -> IResult<&str, DiceRoll> {
+    alt((
+        tuple((
+            terminated(opt(value), ws(tag("d"))),
+            opt(value),
+            preceded(multispace0, opt(explode)),
+        ))
+        .map(|(count, sides, explode)| DiceRoll::Roll { count, sides, explode }),
+        value.map(DiceRoll::NoRoll),
+    ))(i)
+}
 #[derive(Debug)]
 pub enum DiceRoll {
     NoRoll(AstValue), // ...
@@ -402,18 +408,21 @@ impl DiceRoll {
     }
 }
 
-named!(value<&str, AstValue>, sp!(alt!(
-    do_parse!(
-        sp!(tag!("-")) >>
-        v: number >>
-        (AstValue::Int(-v))
-    ) |
-    map!(number, |v| AstValue::Int(v)) |
-    map!(delimited!(tag!("("), expression, tag!(")")), |v| AstValue::Sub(Box::new(v))) |
-    map!(delimited!(tag!("["), separated_list!(tag!(","), expression), tag!("]")), |v| AstValue::Slice(v)) |
-    value!(AstValue::Fate, tag!("F")) |
-    value!(AstValue::Hundred, tag!("%"))
-)));
+fn value(i: &str) -> IResult<&str, AstValue> {
+    alt((
+        preceded(tuple((tag("-"), multispace0)), number).map(|v| AstValue::Int(-v)),
+        number.map(AstValue::Int),
+        delimited(tag("("), ws(expression), tag(")")).map(|v| AstValue::Sub(Box::new(v))),
+        delimited(
+            terminated(tag("["), multispace0),
+            separated_list0(ws(tag(",")), expression),
+            preceded(multispace0, tag("]")),
+        )
+        .map(AstValue::Slice),
+        tag("F").map(|_| AstValue::Fate),
+        tag("%").map(|_| AstValue::Hundred),
+    ))(i)
+}
 #[derive(Debug)]
 pub enum AstValue {
     Int(i64),               // ...
@@ -449,7 +458,9 @@ impl Evaluable for AstValue {
     }
 }
 
-named!(addsub_op<&str, AddSubOp>, alt!(value!(AddSubOp::Add, tag!("+")) | value!(AddSubOp::Sub, tag!("-"))));
+fn addsub_op(i: &str) -> IResult<&str, AddSubOp> {
+    alt((tag("+").map(|_| AddSubOp::Add), tag("-").map(|_| AddSubOp::Sub)))(i)
+}
 #[derive(Debug)]
 pub enum AddSubOp {
     Add, // +
@@ -480,7 +491,9 @@ impl Display for AddSubOp {
     }
 }
 
-named!(muldiv_op<&str, MulDivOp>, alt!(value!(MulDivOp::Mul, tag!("*")) | value!(MulDivOp::Div, tag!("/"))));
+fn muldiv_op(i: &str) -> IResult<&str, MulDivOp> {
+    alt((tag("*").map(|_| MulDivOp::Mul), tag("/").map(|_| MulDivOp::Div)))(i)
+}
 #[derive(Debug)]
 pub enum MulDivOp {
     Mul, // *
@@ -506,12 +519,20 @@ impl Display for MulDivOp {
     }
 }
 
-named!(compare_op<&str, CompareOp>, sp!(do_parse!(
-    each_left: map!(opt!(tag!("e")), |v| v.is_some()) >>
-    op: compare_base_op >>
-    each_right: map!(opt!(tag!("e")), |v| v.is_some()) >>
-    ( CompareOp { each_left, op, each_right} )
-)));
+fn compare_op(i: &str) -> IResult<&str, CompareOp> {
+    let (i, each_left) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
+    let (i, op) = compare_base_op(i)?;
+    let (i, each_right) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
+
+    Ok((
+        i,
+        CompareOp {
+            each_left,
+            op,
+            each_right,
+        },
+    ))
+}
 #[derive(Debug)]
 pub struct CompareOp {
     each_left: bool,
@@ -560,14 +581,16 @@ impl Display for CompareOp {
     }
 }
 
-named!(compare_base_op<&str, CompareBaseOp>, sp!(alt!(
-    value!(CompareBaseOp::LessEq, alt!(tag!("<=") | tag!("=<"))) |
-    value!(CompareBaseOp::Less, tag!("<")) |
-    value!(CompareBaseOp::GreaterEq, alt!(tag!(">=") | tag!("=>"))) |
-    value!(CompareBaseOp::Greater, tag!(">")) |
-    value!(CompareBaseOp::Equal, alt!(tag!("==") | tag!("="))) |
-    value!(CompareBaseOp::Unequal, alt!(tag!("!=") | tag!("<>")))
-)));
+fn compare_base_op(i: &str) -> IResult<&str, CompareBaseOp> {
+    alt((
+        alt((tag("<="), tag("=<"))).map(|_| CompareBaseOp::LessEq),
+        tag("<").map(|_| CompareBaseOp::Less),
+        alt((tag(">="), tag("=>"))).map(|_| CompareBaseOp::GreaterEq),
+        tag(">").map(|_| CompareBaseOp::Greater),
+        alt((tag("=="), tag("="))).map(|_| CompareBaseOp::Equal),
+        alt((tag("!="), tag("<>"))).map(|_| CompareBaseOp::Unequal),
+    ))(i)
+}
 #[derive(Debug)]
 pub enum CompareBaseOp {
     Less,      // <
@@ -602,12 +625,14 @@ impl Display for CompareBaseOp {
     }
 }
 
-named!(dicemod_op<&str, ModOp>, alt!(
-    value!(ModOp::DropLowest, tag!("l")) |
-    value!(ModOp::DropHighest, tag!("h")) |
-    value!(ModOp::KeepLowest, tag!("L")) |
-    value!(ModOp::KeepHighest, tag!("H"))
-));
+fn dicemod_op(i: &str) -> IResult<&str, ModOp> {
+    alt((
+        tag("l").map(|_| ModOp::DropLowest),
+        tag("h").map(|_| ModOp::DropHighest),
+        tag("L").map(|_| ModOp::KeepLowest),
+        tag("H").map(|_| ModOp::KeepHighest),
+    ))(i)
+}
 #[derive(Debug)]
 pub enum ModOp {
     DropLowest,  // l
@@ -663,6 +688,6 @@ impl Display for ModOp {
     }
 }
 
-named!(number<&str, i64>,
-    map_res!(take_while!(|c: char| c.is_ascii_digit()), |s: &str| s.parse::<i64>())
-);
+fn number(i: &str) -> IResult<&str, i64> {
+    map_res(take_while(|c: char| c.is_ascii_digit()), |s: &str| s.parse())(i)
+}
