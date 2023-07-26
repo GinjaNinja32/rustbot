@@ -22,25 +22,33 @@ where
     delimited(multispace0, inner, multispace0)
 }
 
-pub fn fullexpr(i: &str) -> IResult<&str, Expression> {
-    let (i, e) = expression(i)?;
+pub fn command(i: &str) -> IResult<&str, Command> {
+    let (i, expr) = expression(i)?;
     let (i, _) = eof(i)?;
 
-    Ok((i, e))
+    Ok((i, Command { expr }))
+}
+pub struct Command {
+    pub expr: Expression,
+}
+impl Evaluable for Command {
+    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
+        self.expr.eval(limit)
+    }
 }
 
 fn expression(i: &str) -> IResult<&str, Expression> {
-    let (i, r) = ws(repeat)(i)?;
+    let (i, repeat) = ws(repeat)(i)?;
 
-    Ok((i, Expression { expr: r }))
+    Ok((i, Expression { repeat }))
 }
 #[derive(Debug)]
 pub struct Expression {
-    pub expr: Repeat, // ...
+    pub repeat: Repeat, // ...
 }
 impl Evaluable for Expression {
     fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        self.expr.eval(limit)
+        self.repeat.eval(limit)
     }
 }
 
