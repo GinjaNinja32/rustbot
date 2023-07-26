@@ -252,9 +252,8 @@ impl Rustbot {
 
                 let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
 
-                let corecmd = self.core_commands.read().get(&cmd).cloned();
-                if let Some((p, f)) = corecmd {
-                    if ctx.perms()?.contains(p) {
+                if let Some((p, f)) = self.core_commands.read().get(&cmd) {
+                    if ctx.perms()?.contains(*p) {
                         f(ctx, &args).with_context(|| format!("failed to run command {:?}", cmd))?;
                     }
                 } else {
