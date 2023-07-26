@@ -5,7 +5,7 @@ mod dice;
 mod swrpg;
 
 use rustbot::prelude::*;
-use rustbot::spans;
+use rustbot::{spans, spans_plural};
 
 use dice::Evaluable;
 
@@ -58,15 +58,11 @@ fn cmd_space(ctx: &dyn Context, args: &str) -> Result<()> {
     let sixes = v.iter().filter(|v| **v == 6).count();
     let successes = v.iter().filter(|v| **v >= 5).count();
 
-    let ones_str = if ones == 1 { "one" } else { "ones" };
-    let sixes_str = if sixes == 1 { "six" } else { "sixes" };
-    let successes_str = if successes == 1 { "success" } else { "successes" };
-
     return ctx.reply(Message::Spans(spans! {
         desc,
         format!("{:?}", v), ": ",
-        format!("{}", successes), " ", successes_str, ", ",
-        format!("{}", sixes), " ", sixes_str, ", ",
-        format!("{}", ones), " ", ones_str,
+        spans_plural!(successes, "success", "es"), ", ",
+        spans_plural!(sixes, "six", "es"), ", ",
+        spans_plural!(ones, "one"),
     }));
 }

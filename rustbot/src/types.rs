@@ -333,6 +333,24 @@ macro_rules! spans {
     ($($x:expr,)*) => ($crate::spans![$($x),*])
 }
 
+#[macro_export]
+macro_rules! spans_plural {
+    ($n:expr, $base:literal) => {
+        $crate::spans_plural!($n, $base, "", "s")
+    };
+    ($n:expr, $base:literal, $pl:literal) => {
+        $crate::spans_plural!($n, $base, "", $pl)
+    };
+    ($n:expr, $base:literal, $sg:literal, $pl:literal) => {{
+        let v = $n;
+        if v == 1 {
+            $crate::spans!["1 ", $base, $sg]
+        } else {
+            $crate::spans![format!("{} ", v), $base, $pl]
+        }
+    }};
+}
+
 pub fn span_join<'a, M, C>(mut spans: Vec<M>, sep: C) -> Vec<Span<'a>>
 where
     M: MoveToVecSpan<'a>,
