@@ -34,7 +34,7 @@ pub mod limits {
     }
 }
 
-trait Evaluable {
+pub trait Evaluable {
     fn eval(&self, limit: &mut limits::Limiter) -> Result<(Vec<Span>, value::Value), String>;
 }
 
