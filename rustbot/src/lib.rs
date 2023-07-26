@@ -19,6 +19,9 @@ pub extern crate tokio;
 pub mod types;
 pub mod utils;
 
+#[cfg(test)]
+mod libtest;
+
 pub mod prelude {
     pub use crate::bail_user;
     pub use crate::thread;
