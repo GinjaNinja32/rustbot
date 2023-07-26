@@ -19,6 +19,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 mod bot;
 mod config;
 mod context;
+mod core;
 mod db;
 mod message;
 
