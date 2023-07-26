@@ -273,7 +273,7 @@ impl Rustbot {
 
         for name in enabled {
             if let Some(m) = self.modules.read().get(&name) {
-                m.rent::<_, Result<()>>(|meta| {
+                m.with_meta::<Result<_>>(|meta| {
                     for (ty, handler) in &meta.handlers {
                         if ty.contains(typ) {
                             self.maybe_ignore_err(&name, handler(ctx, typ, message), ())
@@ -414,7 +414,7 @@ impl Rustbot {
                     "INSERT INTO modules (name, enabled) VALUES ($1, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
                     &[&name],
                 )?;
-            m.rent_mut::<_, Result<()>>(|meta| {
+            m.with_meta_mut::<Result<_>>(|meta| {
                 let mut commands = self.commands.write();
                 for command in &meta.commands {
                     commands.remove(command.0);
@@ -449,9 +449,9 @@ impl Rustbot {
             "INSERT INTO modules (name, enabled) VALUES ($1, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
             &[&name],
         )?;
-        let mut m = load_module(name, lib)?;
+        let m = load_module(name, lib)?;
         let mut commands = self.commands.write();
-        m.rent_mut::<_, Result<()>>(|meta| {
+        m.with_meta::<Result<_>>(|meta| {
             for command in &meta.commands {
                 commands.insert(command.0.to_string(), (name.to_string(), (*command.1).clone()));
             }
@@ -996,22 +996,17 @@ impl dis::EventHandler for DiscordBot {
     }
 }
 
-use crate::bot::rent_module::Module;
-rental! {
-    #[allow(clippy::useless_transmute)]
-    mod rent_module {
-        use crate::bot;
+use ouroboros::self_referencing;
 
-        #[rental]
-        pub struct Module {
-            lib: Box<libloading::Library>,
-            meta: bot::Meta,
-        }
-    }
+#[self_referencing]
+pub struct Module {
+    lib: Box<libloading::Library>,
+    #[borrows(lib)]
+    meta: Meta,
 }
 
-fn load_module(name: &str, lib: Library) -> Result<rent_module::Module> {
-    let m = rent_module::Module::try_new_or_drop::<_, Error>(Box::new(lib), |lib| unsafe {
+fn load_module(name: &str, lib: Library) -> Result<Module> {
+    let m = Module::try_new(Box::new(lib), |lib| unsafe {
         match lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") {
             Ok(f) => {
                 let mut m = Meta::new();
