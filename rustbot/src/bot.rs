@@ -33,10 +33,11 @@ pub struct Rustbot {
     caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
     db: Mutex<postgres::Client>,
     modules: RwLock<BTreeMap<String, Module>>,
+    core_commands: RwLock<BTreeMap<String, (Perms, Box<crate::core::CoreCommand>)>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
     logger: Mutex<LogInfo>,
 
-    suppress_errors: RwLock<BTreeMap<String, Instant>>,
+    pub(crate) suppress_errors: RwLock<BTreeMap<String, Instant>>,
 }
 
 struct LogInfo {
@@ -251,11 +252,18 @@ impl Rustbot {
 
                 let (cmd, args) = self.resolve_alias(parts[0], parts.get(1).unwrap_or(&""))?;
 
-                let res = self.commands.read().get(&cmd).cloned();
-                if let Some((m, f)) = res {
-                    if enabled.contains(&m) {
-                        f.call(ctx, &args)
-                            .with_context(|| format!("failed to run command {:?}", cmd))?;
+                let corecmd = self.core_commands.read().get(&cmd).cloned();
+                if let Some((p, f)) = corecmd {
+                    if ctx.perms()?.contains(p) {
+                        f(ctx, &args).with_context(|| format!("failed to run command {:?}", cmd))?;
+                    }
+                } else {
+                    let res = self.commands.read().get(&cmd).cloned();
+                    if let Some((m, f)) = res {
+                        if enabled.contains(&m) {
+                            f.call(ctx, &args)
+                                .with_context(|| format!("failed to run command {:?}", cmd))?;
+                        }
                     }
                 }
 
@@ -398,6 +406,81 @@ impl Rustbot {
         &s[..last_char_inside]
     }
 
+    pub fn drop_module(&self, name: &str) -> Result<()> {
+        if let Some(mut m) = self.modules.write().remove(name) {
+            info!("drop module: {}", name);
+            let mut db = self.db.lock();
+            db
+                .execute(
+                    "INSERT INTO modules (name, enabled) VALUES ($1, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
+                    &[&name],
+                )?;
+            m.rent_mut::<_, Result<()>>(|meta| {
+                let mut commands = self.commands.write();
+                for command in &meta.commands {
+                    commands.remove(command.0);
+                }
+                for chan in meta.unload_channels.drain(..) {
+                    chan.send(()).unwrap_or(()); // Err() here means the remote end was dropped before we got here
+                }
+                if let Some(f) = &mut meta.deinit {
+                    f(self)?;
+                }
+                for thread in meta.threads.drain(..) {
+                    thread.join().map_err(|e| Error::msg(format!("{:?}", e)))?;
+                }
+                Ok(())
+            })?;
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn load_module(&self, name: &str) -> Result<()> {
+        info!("load module: {}", name);
+        let libpath = if cfg!(debug_assertions) {
+            format!("libmod_{}.so", name)
+        } else {
+            format!("target/release/libmod_{}.so", name)
+        };
+        let lib = Library::new(libpath)?;
+
+        self.db.lock().execute(
+            "INSERT INTO modules (name, enabled) VALUES ($1, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
+            &[&name],
+        )?;
+        let mut m = load_module(name, lib)?;
+        let mut commands = self.commands.write();
+        m.rent_mut::<_, Result<()>>(|meta| {
+            for command in &meta.commands {
+                commands.insert(command.0.to_string(), (name.to_string(), (*command.1).clone()));
+            }
+            Ok(())
+        })?;
+        self.modules.write().insert(name.to_string(), m);
+        Ok(())
+    }
+
+    pub fn set_log_level(&self, level: Level) -> Result<()> {
+        self.logger.lock().current_level = level;
+        self.update_logger_spec()
+    }
+
+    pub fn set_module_log_level(&self, module: &str, level: Option<Level>) -> Result<()> {
+        if let Some(level) = level {
+            self.db.lock().execute(
+                "UPDATE modules SET log_level = $1::text::log_level WHERE name = $2",
+                &[&level.to_string().to_ascii_lowercase().as_str(), &module],
+            )?;
+        } else {
+            self.db
+                .lock()
+                .execute("UPDATE modules SET log_level = NULL WHERE name = $1", &[&module])?;
+        }
+        self.update_logger_spec()
+    }
+
     fn update_logger_spec(&self) -> Result<()> {
         let mut logger = self.logger.lock();
 
@@ -489,81 +572,6 @@ impl FromSql<'_> for ArgumentTransforms {
 }
 
 impl types::Bot for Rustbot {
-    fn drop_module(&self, name: &str) -> Result<()> {
-        if let Some(mut m) = self.modules.write().remove(name) {
-            info!("drop module: {}", name);
-            let mut db = self.db.lock();
-            db
-                .execute(
-                    "INSERT INTO modules (name, enabled) VALUES ($1, false) ON CONFLICT (name) DO UPDATE SET enabled = false",
-                    &[&name],
-                )?;
-            m.rent_mut::<_, Result<()>>(|meta| {
-                let mut commands = self.commands.write();
-                for command in &meta.commands {
-                    commands.remove(command.0);
-                }
-                for chan in meta.unload_channels.drain(..) {
-                    chan.send(()).unwrap_or(()); // Err() here means the remote end was dropped before we got here
-                }
-                if let Some(f) = &mut meta.deinit {
-                    f(self)?;
-                }
-                for thread in meta.threads.drain(..) {
-                    thread.join().map_err(|e| Error::msg(format!("{:?}", e)))?;
-                }
-                Ok(())
-            })?;
-            Ok(())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn load_module(&self, name: &str) -> Result<()> {
-        info!("load module: {}", name);
-        let libpath = if cfg!(debug_assertions) {
-            format!("libmod_{}.so", name)
-        } else {
-            format!("target/release/libmod_{}.so", name)
-        };
-        let lib = Library::new(libpath)?;
-
-        self.db.lock().execute(
-            "INSERT INTO modules (name, enabled) VALUES ($1, true) ON CONFLICT (name) DO UPDATE SET enabled = true",
-            &[&name],
-        )?;
-        let mut m = load_module(name, lib)?;
-        let mut commands = self.commands.write();
-        m.rent_mut::<_, Result<()>>(|meta| {
-            for command in &meta.commands {
-                commands.insert(command.0.to_string(), (name.to_string(), (*command.1).clone()));
-            }
-            Ok(())
-        })?;
-        self.modules.write().insert(name.to_string(), m);
-        Ok(())
-    }
-
-    fn set_log_level(&self, level: Level) -> Result<()> {
-        self.logger.lock().current_level = level;
-        self.update_logger_spec()
-    }
-
-    fn set_module_log_level(&self, module: &str, level: Option<Level>) -> Result<()> {
-        if let Some(level) = level {
-            self.db.lock().execute(
-                "UPDATE modules SET log_level = $1::text::log_level WHERE name = $2",
-                &[&level.to_string().to_ascii_lowercase().as_str(), &module],
-            )?;
-        } else {
-            self.db
-                .lock()
-                .execute("UPDATE modules SET log_level = NULL WHERE name = $1", &[&module])?;
-        }
-        self.update_logger_spec()
-    }
-
     fn sql(&self) -> &Mutex<postgres::Client> {
         &self.db
     }
@@ -752,10 +760,6 @@ impl types::Bot for Rustbot {
             bail!("invalid source")
         }
     }
-
-    fn suppress_errors(&self, module: String, until: Instant) {
-        self.suppress_errors.write().insert(module, until);
-    }
 }
 
 const LOG_MODULE_PATH_MAX_LEN: usize = 25;
@@ -855,6 +859,7 @@ pub fn start() -> Result<()> {
         caches: RwLock::new(BTreeMap::new()),
         db: Mutex::new(db::open(&config.postgres)?),
         modules: RwLock::new(BTreeMap::new()),
+        core_commands: RwLock::new(crate::core::get_commands()),
         commands: RwLock::new(BTreeMap::new()),
         logger: Mutex::new(LogInfo {
             logger,

@@ -123,10 +123,6 @@ pub trait Meta {
 }
 
 pub trait Bot {
-    fn load_module(&self, _: &str) -> Result<()>;
-    fn drop_module(&self, _: &str) -> Result<()>;
-    fn set_log_level(&self, _: Level) -> Result<()>;
-    fn set_module_log_level(&self, _: &str, _: Option<Level>) -> Result<()>;
     fn sql(&self) -> &Mutex<postgres::Client>;
 
     fn irc_send_privmsg(&self, _: &str, _: &str, _: &str) -> Result<()>;
@@ -136,8 +132,6 @@ pub trait Bot {
     fn dis_send_message(&self, _: &str, _: &str, _: &str, _: &str, _: bool) -> Result<()>;
 
     fn send_message(&self, _: &str, _: &str, _: Message) -> Result<()>;
-
-    fn suppress_errors(&self, _: String, _: std::time::Instant);
 }
 
 pub trait Context {
