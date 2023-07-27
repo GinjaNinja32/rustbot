@@ -1,13 +1,8 @@
-#[macro_use]
-extern crate nom;
-
 mod dice;
 mod swrpg;
 
 use rustbot::prelude::*;
 use rustbot::{spans, spans_plural};
-
-use dice::Evaluable;
 
 #[no_mangle]
 pub fn get_meta(meta: &mut dyn Meta) {
@@ -39,30 +34,16 @@ fn cmd_space(ctx: &dyn Context, args: &str) -> Result<()> {
     }
 
     let (count, desc) = match args.find(' ') {
-        None => (args, spans! {}),
+        None => (args, "".to_string()),
         Some(idx) => {
             let (count, desc) = args.split_at(idx);
-            (count, spans! {desc, ": "})
+            (count, format!("{}: ", desc))
         }
     };
 
-    let expr = format!("{}d6", count);
+    let expr = format!(
+        "D:{count}; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); {desc}$R: $S success%[es], $C six%[es], $O one%s",
+    );
 
-    let expr = dice::parse(&expr).map_err(UserError::new)?;
-    let mut limit = dice::limits::Limiter::new(10000);
-
-    let (_, v) = expr.eval(&mut limit).map_err(UserError::new)?;
-    let v = v.to_int_slice().map_err(UserError::new)?;
-
-    let ones = v.iter().filter(|v| **v == 1).count();
-    let sixes = v.iter().filter(|v| **v == 6).count();
-    let successes = v.iter().filter(|v| **v >= 5).count();
-
-    return ctx.reply(Message::Spans(spans! {
-        desc,
-        format!("{:?}", v), ": ",
-        spans_plural!(successes, "success", "es"), ", ",
-        spans_plural!(sixes, "six", "es"), ", ",
-        spans_plural!(ones, "one"),
-    }));
+    cmd_dice(ctx, &expr)
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rustbot::prelude::Span;
 use rustbot::spans;
 
@@ -35,14 +37,17 @@ pub mod limits {
 }
 
 pub trait Evaluable {
-    fn eval(&self, limit: &mut limits::Limiter) -> Result<(Vec<Span>, value::Value), String>;
+    fn eval(
+        &self,
+        limit: &mut limits::Limiter,
+        values: &BTreeMap<char, value::Value>,
+    ) -> Result<(Vec<Span>, value::Value), String>;
 }
 
-pub fn parse(input: &str) -> Result<ast::Expression, String> {
+pub fn parse(input: &str) -> Result<ast::Command, String> {
     ast::command(input).map(|(_, c)| c).map_err(|e| format!("{:?}", e))
 }
 
-pub fn eval(expr: &ast::Expression, mut limit: limits::Limiter) -> Result<Vec<Span>, String> {
-    let (s, v) = expr.eval(&mut limit)?;
-    Ok(spans!(v.to_string(), ": ", s))
+pub fn eval(cmd: &ast::Command, mut limit: limits::Limiter) -> Result<Vec<Span>, String> {
+    cmd.eval(&mut limit)
 }

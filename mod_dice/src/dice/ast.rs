@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 
 use rustbot::prelude::{span_join, Color, Format, Span};
@@ -23,18 +24,105 @@ where
 }
 
 pub fn command(i: &str) -> IResult<&str, Command> {
-    let (i, expr) = expression(i)?;
+    let (i, res) = alt((
+        tuple((
+            separated_list1(ws(tag(";")), tuple((terminated(anychar, tag(":")), expression))),
+            preceded(ws(tag(";")), many0(output_segment)),
+        ))
+        .map(|(bindings, output)| Command::Complex { bindings, output }),
+        expression.map(Command::Simple),
+    ))(i)?;
     let (i, _) = eof(i)?;
 
-    Ok((i, Command { expr }))
+    Ok((i, res))
 }
-pub struct Command {
-    pub expr: Expression,
+pub enum Command {
+    Simple(Expression),
+    Complex {
+        bindings: Vec<(char, Expression)>,
+        output: Vec<OutputSegment>,
+    },
 }
-impl Evaluable for Command {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        self.expr.eval(limit)
+impl Command {
+    pub fn eval(&self, limit: &mut Limiter) -> Result<Vec<Span>, String> {
+        match self {
+            Self::Simple(expr) => {
+                let (s, v) = expr.eval(limit, &BTreeMap::new())?;
+
+                Ok(spans!(v.to_string(), ": ", s))
+            }
+            Self::Complex { bindings, output } => {
+                let mut vals = BTreeMap::new();
+
+                for (ch, expr) in bindings {
+                    let (_, v) = expr.eval(limit, &vals)?;
+                    vals.insert(*ch, v);
+                }
+
+                let mut spans = vec![];
+                let mut last_plural = false;
+                for seg in output {
+                    match seg {
+                        OutputSegment::Text(s) => spans.push(span! {s}),
+                        OutputSegment::Value(ch) => match vals.get(ch) {
+                            Some(v) => {
+                                if let Value::Int(1) = v {
+                                    last_plural = false
+                                } else {
+                                    last_plural = true
+                                }
+                                spans.push(span! {format!("{}", v)});
+                            }
+                            None => {
+                                return Err(format!("binding ${} not defined", ch));
+                            }
+                        },
+                        OutputSegment::Plural(sg, pl) => {
+                            if last_plural {
+                                spans.push(span! {pl});
+                            } else {
+                                spans.push(span! {sg});
+                            }
+                        }
+                    }
+                }
+
+                Ok(spans)
+            }
+        }
     }
+}
+
+fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
+    alt((
+        preceded(
+            tag("%"),
+            alt((
+                tag("s").map(|_| OutputSegment::Plural("".into(), "s".into())),
+                delimited(
+                    tag("["),
+                    separated_pair(
+                        take_while(|c| c != '|').map(String::from),
+                        tag("|"),
+                        take_while(|c| c != ']').map(String::from),
+                    ),
+                    tag("]"),
+                )
+                .map(|(sg, pl)| OutputSegment::Plural(sg, pl)),
+                delimited(tag("["), take_while(|c| c != ']').map(String::from), tag("]"))
+                    .map(|pl| OutputSegment::Plural("".into(), pl)),
+            )),
+        ),
+        preceded(tag("$"), anychar).map(OutputSegment::Value),
+        take_while1(|c| c != '%' && c != '$')
+            .map(String::from)
+            .map(OutputSegment::Text),
+    ))(i)
+}
+pub enum OutputSegment {
+    Text(String),
+    Value(char),
+    Plural(String, String),
 }
 
 fn expression(i: &str) -> IResult<&str, Expression> {
@@ -47,8 +135,8 @@ pub struct Expression {
     pub repeat: Repeat, // ...
 }
 impl Evaluable for Expression {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        self.repeat.eval(limit)
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        self.repeat.eval(limit, values)
     }
 }
 
@@ -64,13 +152,13 @@ pub struct Repeat {
     pub term: Comparison,    // ...
 }
 impl Evaluable for Repeat {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match self.repeat {
-            None => self.term.eval(limit),
+            None => self.term.eval(limit, values),
             Some(n) => {
                 let (strs, vals) = (0..n)
                     .map(|_| {
-                        let (s, v) = self.term.eval(limit)?;
+                        let (s, v) = self.term.eval(limit, values)?;
                         Ok((s, v.to_int()?))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
@@ -95,12 +183,12 @@ pub struct Comparison {
     pub right: Option<(CompareOp, AddSub)>, // ( operator ... )?
 }
 impl Evaluable for Comparison {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        let l = self.left.eval(limit)?;
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        let l = self.left.eval(limit, values)?;
         match &self.right {
             None => Ok(l),
             Some((op, term)) => {
-                let r = term.eval(limit)?;
+                let r = term.eval(limit, values)?;
                 let v = op.apply(l.1, r.1)?;
 
                 Ok((spans!(l.0, format!("{}", op), r.0), v))
@@ -121,11 +209,11 @@ pub struct AddSub {
     pub right: Vec<(AddSubOp, MulDiv)>, // ( operator ... )*
 }
 impl Evaluable for AddSub {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        let (s, mut l) = self.left.eval(limit)?;
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        let (s, mut l) = self.left.eval(limit, values)?;
         let mut ss = s;
         for elem in &self.right {
-            let (mut rs, r) = elem.1.eval(limit)?;
+            let (mut rs, r) = elem.1.eval(limit, values)?;
 
             ss.push(format!("{}", elem.0).into());
             ss.append(&mut rs);
@@ -147,11 +235,11 @@ pub struct MulDiv {
     pub right: Vec<(MulDivOp, Sum)>, // ( operator ... )*
 }
 impl Evaluable for MulDiv {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        let (s, mut l) = self.left.eval(limit)?;
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        let (s, mut l) = self.left.eval(limit, values)?;
         let mut ss = s;
         for elem in &self.right {
-            let (mut rs, r) = elem.1.eval(limit)?;
+            let (mut rs, r) = elem.1.eval(limit, values)?;
 
             ss.push(format!("{}", elem.0).into());
             ss.append(&mut rs);
@@ -174,8 +262,8 @@ pub struct Sum {
     pub term: DiceMod, // ...
 }
 impl Evaluable for Sum {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        let (s, v) = self.term.eval(limit)?;
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        let (s, v) = self.term.eval(limit, values)?;
         if self.is_sum {
             Ok((spans!("s", s), Value::Int(v.to_int()?)))
         } else {
@@ -196,19 +284,19 @@ pub struct DiceMod {
     pub op: Option<(ModOp, AstValue)>, // ( operator ... )?
 }
 impl Evaluable for DiceMod {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match &self.op {
-            None => self.roll.eval(limit),
+            None => self.roll.eval(limit, values),
             Some((op, r)) => match self.roll {
                 DiceRoll::NoRoll(_) => {
-                    let l = self.roll.eval(limit)?;
-                    let (rs, rv) = r.eval(limit)?;
+                    let l = self.roll.eval(limit, values)?;
+                    let (rs, rv) = r.eval(limit, values)?;
                     let (_, v) = op.apply(l.1, rv)?;
                     Ok((spans!(l.0, format!("{}", op), rs), v))
                 }
                 DiceRoll::Roll { .. } => {
-                    let (s, l) = self.roll._eval(limit)?;
-                    let (rs, rv) = r.eval(limit)?;
+                    let (s, l) = self.roll._eval(limit, values)?;
+                    let (rs, rv) = r.eval(limit, values)?;
                     let (vs, v) = op.apply(l, rv)?;
                     Ok((spans!(s, format!("{}", op), rs, ":", vs), v))
                 }
@@ -263,8 +351,8 @@ pub enum DiceRoll {
     },
 }
 impl Evaluable for DiceRoll {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
-        let (s, r) = self._eval(limit)?;
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
+        let (s, r) = self._eval(limit, values)?;
         match self {
             DiceRoll::NoRoll(_) => Ok((s, r)),
             DiceRoll::Roll { .. } => Ok((spans!(s, ":", r.to_string()), r)),
@@ -321,9 +409,9 @@ impl DiceOptions {
 }
 
 impl DiceRoll {
-    fn _eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
+    fn _eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match self {
-            DiceRoll::NoRoll(v) => v.eval(limit),
+            DiceRoll::NoRoll(v) => v.eval(limit, values),
             DiceRoll::Roll {
                 count: cv,
                 sides: sv,
@@ -331,7 +419,7 @@ impl DiceRoll {
             } => {
                 let (cs, c) = match cv {
                     Some(v) => {
-                        let (vs, vv) = v.eval(limit)?;
+                        let (vs, vv) = v.eval(limit, values)?;
                         let count = vv.to_int()?;
                         (vs, count)
                     }
@@ -344,7 +432,7 @@ impl DiceRoll {
 
                 let (ss, s) = match sv {
                     Some(v) => {
-                        let (vs, vv) = v.eval(limit)?;
+                        let (vs, vv) = v.eval(limit, values)?;
                         let opts: DiceOptions = match vv {
                             Value::Int(i) if i >= 1 => DiceOptions::Range(1, i),
                             Value::Int(0) => return Err("cannot roll a d0".to_string()),
@@ -429,6 +517,7 @@ fn value(i: &str) -> IResult<&str, AstValue> {
         .map(AstValue::Slice),
         tag("F").map(|_| AstValue::Fate),
         tag("%").map(|_| AstValue::Hundred),
+        preceded(tag("$"), anychar).map(AstValue::Binding),
     ))(i)
 }
 #[derive(Debug)]
@@ -438,20 +527,21 @@ pub enum AstValue {
     Slice(Vec<Expression>), // "[" ... "]"
     Fate,                   // "F"
     Hundred,                // "%"
+    Binding(char),          // "$" ...
 }
 impl Evaluable for AstValue {
-    fn eval(&self, limit: &mut Limiter) -> Result<(Vec<Span>, Value), String> {
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match self {
             AstValue::Int(i) => Ok((spans!(format!("{}", i)), Value::Int(*i))),
             AstValue::Sub(expr) => {
-                let (es, ev) = expr.eval(limit)?;
+                let (es, ev) = expr.eval(limit, values)?;
                 Ok((spans!("(", es, ")"), ev))
             }
             AstValue::Slice(s) => {
                 let (strs, vals) = s
                     .iter()
                     .map(|e| {
-                        let (s, v) = e.eval(limit)?;
+                        let (s, v) = e.eval(limit, values)?;
                         Ok((s, v.to_int()?))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
@@ -462,6 +552,10 @@ impl Evaluable for AstValue {
             }
             AstValue::Fate => Ok((spans!("F"), Value::IntSlice(vec![-1, 0, 1]))),
             AstValue::Hundred => Ok((spans!("%"), Value::Int(100))),
+            AstValue::Binding(ch) => match values.get(ch) {
+                Some(v) => Ok((spans!("$", format!("{}", ch)), v.clone())),
+                None => Err(format!("binding ${} not defined", ch)),
+            },
         }
     }
 }
