@@ -6,9 +6,6 @@ use serenity::model::prelude as ser;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-pub use self::Prefix::*;
-pub use self::Source::*;
-
 pub struct Context<'a> {
     pub bot: &'a bot::Rustbot,
     pub config: String,
@@ -35,8 +32,8 @@ impl<'a> types::Context for Context<'a> {
 
     fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
-            Irc { prefix, channel } => {
-                if let Some(User { nick, .. }) = prefix {
+            Source::Irc { prefix, channel } => {
+                if let Some(Prefix::User { nick, .. }) = prefix {
                     match channel {
                         None => {
                             for msg in message::format_irc(message)? {
@@ -56,7 +53,7 @@ impl<'a> types::Context for Context<'a> {
                     }
                 }
             }
-            Discord { channel, http, .. } => {
+            Source::Discord { channel, http, .. } => {
                 channel.say(http, message::format_discord(message)?).map(|_| ())?;
             }
         }
@@ -68,8 +65,8 @@ impl<'a> types::Context for Context<'a> {
         // TODO
         // self.bot.perms(&self.config, &self.source)
         match &self.source {
-            Irc {
-                prefix: Some(User { nick, user, host }),
+            Source::Irc {
+                prefix: Some(Prefix::User { nick, user, host }),
                 ..
             } => {
                 let perms: Perms = match self.bot.sql().lock().query(
@@ -90,7 +87,7 @@ impl<'a> types::Context for Context<'a> {
                 };
                 Ok(perms)
             }
-            Discord { user, .. } => {
+            Source::Discord { user, .. } => {
                 let perms: Perms = match self.bot.sql().lock().query(
                     "SELECT flags FROM dis_permissions WHERE config_id = $1 AND user_id = $2",
                     &[&self.config, &(*user.id.as_u64() as i64)],
@@ -133,38 +130,40 @@ pub enum Source {
 impl types::Source for Source {
     fn user_string(&self) -> Cow<str> {
         match self {
-            Irc { prefix, .. } => {
+            Source::Irc { prefix, .. } => {
                 if let Some(prefix) = prefix {
                     format!("{}", prefix).into()
                 } else {
                     "none".into()
                 }
             }
-            Discord { user, guild, .. } => format!("{:?}:{}", guild.map(|g| *g.as_u64()), user.id.as_u64()).into(),
+            Source::Discord { user, guild, .. } => {
+                format!("{:?}:{}", guild.map(|g| *g.as_u64()), user.id.as_u64()).into()
+            }
         }
     }
 
     fn user_pretty(&self) -> Cow<str> {
         match self {
-            Irc { prefix, .. } => match prefix {
-                Some(User { nick, .. }) => nick.into(),
-                Some(Server(s)) => s.into(),
+            Source::Irc { prefix, .. } => match prefix {
+                Some(Prefix::User { nick, .. }) => nick.into(),
+                Some(Prefix::Server(s)) => s.into(),
                 None => "???".into(),
             },
-            Discord { user, .. } => (&user.name).into(),
+            Source::Discord { user, .. } => (&user.name).into(),
         }
     }
 
     fn channel_string(&self) -> Cow<str> {
         match self {
-            Irc { channel, .. } => {
+            Source::Irc { channel, .. } => {
                 if let Some(channel) = channel {
                     format!("irc:{}", channel)
                 } else {
                     "irc:query".to_string()
                 }
             }
-            Discord { channel, guild, .. } => format!(
+            Source::Discord { channel, guild, .. } => format!(
                 "dis:{}:{}",
                 guild
                     .map(|g| format!("{}", *g.as_u64()))
@@ -176,7 +175,7 @@ impl types::Source for Source {
     }
 
     fn get_discord_params(&self) -> Option<(Option<u64>, u64, u64)> {
-        if let Discord {
+        if let Source::Discord {
             guild, channel, user, ..
         } = self
         {
@@ -187,10 +186,10 @@ impl types::Source for Source {
     }
 
     fn get_irc_params(&self) -> Option<(Option<String>, String)> {
-        if let Irc { prefix, channel, .. } = self {
+        if let Source::Irc { prefix, channel, .. } = self {
             match prefix {
-                Some(User { nick, .. }) => Some((channel.clone(), nick.clone())),
-                Some(Server(s)) => Some((channel.clone(), s.clone())),
+                Some(Prefix::User { nick, .. }) => Some((channel.clone(), nick.clone())),
+                Some(Prefix::Server(s)) => Some((channel.clone(), s.clone())),
                 None => None,
             }
         } else {
@@ -208,8 +207,8 @@ pub enum Prefix {
 impl std::fmt::Display for Prefix {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         match self {
-            Server(s) => write!(f, "{}", s),
-            User { nick, user, host } => write!(f, "{}!{}@{}", nick, user, host),
+            Self::Server(s) => write!(f, "{}", s),
+            Self::User { nick, user, host } => write!(f, "{}!{}@{}", nick, user, host),
         }
     }
 }

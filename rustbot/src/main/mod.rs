@@ -1,14 +1,3 @@
-extern crate irc;
-extern crate libloading;
-extern crate migrant_lib;
-extern crate parking_lot;
-extern crate postgres;
-extern crate regex;
-extern crate rustbot;
-extern crate serde;
-extern crate serde_json;
-extern crate serenity;
-
 mod bot;
 mod config;
 mod context;

@@ -6,7 +6,7 @@ use futures::channel::oneshot::{self, Receiver, Sender};
 use libloading::Library;
 use log::{error, info, Level};
 use parking_lot::{Mutex, RwLock};
-use postgres::types::FromSql;
+use postgres::types::{FromSql, Type};
 use regex::Regex;
 use serde::Deserialize;
 use serenity::model::channel;
@@ -22,11 +22,11 @@ use std::time::{Duration, Instant};
 
 use super::config;
 use super::context;
-use super::context::Prefix;
+use super::context::{Prefix, Source};
 use super::core;
 use super::db;
 use super::message;
-use rustbot::prelude::*;
+use rustbot::prelude::{Source as LibSource, *};
 use rustbot::types;
 
 pub struct Rustbot {
@@ -81,7 +81,7 @@ impl Rustbot {
                 typ |= HandleType::Public
             }
 
-            let source = context::Irc {
+            let source = Source::Irc {
                 prefix: irc_parse_prefix(irc_msg.prefix),
                 channel: if channel == bot_name { None } else { Some(channel) },
             };
@@ -118,7 +118,7 @@ impl Rustbot {
         let ctx = &context::Context {
             bot: self,
             config: cfg,
-            source: context::Discord {
+            source: Source::Discord {
                 user: msg.author,
                 channel: msg.channel_id,
                 guild: msg.guild_id,
@@ -559,14 +559,14 @@ impl std::ops::Deref for ArgumentTransforms {
 
 impl FromSql<'_> for ArgumentTransforms {
     fn from_sql(
-        ty: &postgres::types::Type,
+        ty: &Type,
         raw: &[u8],
     ) -> std::result::Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
         let v = serde_json::Value::from_sql(ty, raw)?;
         Ok(serde_json::from_value(v)?)
     }
 
-    fn accepts(ty: &postgres::types::Type) -> bool {
+    fn accepts(ty: &Type) -> bool {
         serde_json::Value::accepts(ty)
     }
 }

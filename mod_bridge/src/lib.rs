@@ -1,8 +1,4 @@
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate rustbot;
-
+use lazy_static::lazy_static;
 use regex::Regex;
 use rustbot::prelude::*;
 use std::borrow::Cow;
