@@ -1,4 +1,4 @@
-use crate::utils;
+use super::duration;
 
 #[test]
 fn test_parse_duration() {
@@ -16,7 +16,7 @@ fn test_parse_duration() {
     ];
 
     for case in cases {
-        assert_eq!(utils::parse_duration(case.0).unwrap().as_secs(), case.1);
+        assert_eq!(duration::parse_duration(case.0).unwrap().as_secs(), case.1);
     }
 
     #[rustfmt::skip]
@@ -26,6 +26,6 @@ fn test_parse_duration() {
     ];
 
     for case in error_cases {
-        assert_eq!(utils::parse_duration(case.0).unwrap_err().to_string(), case.1);
+        assert_eq!(duration::parse_duration(case.0).unwrap_err().to_string(), case.1);
     }
 }
