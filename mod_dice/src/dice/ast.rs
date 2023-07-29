@@ -572,7 +572,7 @@ impl AddSubOp {
     fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
         if let (Value::IntSlice(l), Value::IntSlice(r)) = (&left, &right) {
             let mut l = l.clone();
-            l.extend_from_slice(&r);
+            l.extend_from_slice(r);
             return Ok(Value::IntSlice(l));
         }
         let l = left.to_int()?;

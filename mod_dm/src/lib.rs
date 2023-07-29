@@ -55,7 +55,7 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
 /proc/main()
     {}
 "#,
-                args.replace("\n", "\n    ")
+                args.replace('\n', "\n    ")
             )
         }
     } else {

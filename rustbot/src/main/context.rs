@@ -35,7 +35,7 @@ impl<'a> types::Context for Context<'a> {
 
     fn reply(&self, message: Message) -> Result<()> {
         match &self.source {
-            IRC { prefix, channel } => {
+            Irc { prefix, channel } => {
                 if let Some(User { nick, .. }) = prefix {
                     match channel {
                         None => {
@@ -68,7 +68,7 @@ impl<'a> types::Context for Context<'a> {
         // TODO
         // self.bot.perms(&self.config, &self.source)
         match &self.source {
-            IRC {
+            Irc {
                 prefix: Some(User { nick, user, host }),
                 ..
             } => {
@@ -116,7 +116,7 @@ impl<'a> types::Context for Context<'a> {
 
 #[derive(Clone)]
 pub enum Source {
-    IRC {
+    Irc {
         prefix: Option<Prefix>,
         channel: Option<String>,
     },
@@ -133,7 +133,7 @@ pub enum Source {
 impl types::Source for Source {
     fn user_string(&self) -> Cow<str> {
         match self {
-            IRC { prefix, .. } => {
+            Irc { prefix, .. } => {
                 if let Some(prefix) = prefix {
                     format!("{}", prefix).into()
                 } else {
@@ -146,7 +146,7 @@ impl types::Source for Source {
 
     fn user_pretty(&self) -> Cow<str> {
         match self {
-            IRC { prefix, .. } => match prefix {
+            Irc { prefix, .. } => match prefix {
                 Some(User { nick, .. }) => nick.into(),
                 Some(Server(s)) => s.into(),
                 None => "???".into(),
@@ -157,7 +157,7 @@ impl types::Source for Source {
 
     fn channel_string(&self) -> Cow<str> {
         match self {
-            IRC { channel, .. } => {
+            Irc { channel, .. } => {
                 if let Some(channel) = channel {
                     format!("irc:{}", channel)
                 } else {
@@ -187,7 +187,7 @@ impl types::Source for Source {
     }
 
     fn get_irc_params(&self) -> Option<(Option<String>, String)> {
-        if let IRC { prefix, channel, .. } = self {
+        if let Irc { prefix, channel, .. } = self {
             match prefix {
                 Some(User { nick, .. }) => Some((channel.clone(), nick.clone())),
                 Some(Server(s)) => Some((channel.clone(), s.clone())),

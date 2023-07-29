@@ -53,7 +53,7 @@ fn render_irc(spans: Vec<Span>) -> String {
                 let color = *color;
 
                 if color == col && format == fmt {
-                    st.push_str(&text);
+                    st.push_str(text);
                     continue;
                 }
 
@@ -61,7 +61,7 @@ fn render_irc(spans: Vec<Span>) -> String {
                     col = color;
                     fmt = format;
                     st.push('\x0F');
-                    st.push_str(&text);
+                    st.push_str(text);
                     continue;
                 }
 
@@ -100,7 +100,7 @@ fn render_irc(spans: Vec<Span>) -> String {
                     fmt = format;
                 }
 
-                st.push_str(&text);
+                st.push_str(text);
             }
             Span::DiscordEmoji(name, _) => {
                 st.push(':');

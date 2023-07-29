@@ -3,6 +3,8 @@ extern crate lazy_static;
 
 mod airport;
 
+use rustbot::spans;
+
 use chrono::NaiveDateTime;
 use rustbot::prelude::*;
 use serde::Deserialize;
@@ -50,9 +52,10 @@ impl Module {
             "unknown location".to_string()
         };
 
-        let timestamp = NaiveDateTime::from_timestamp(data.dt + data.timezone, 0).format("%a %e %b %H:%M");
-        let sunrise = NaiveDateTime::from_timestamp(data.sys.sunrise + data.timezone, 0).format("%H:%M");
-        let sunset = NaiveDateTime::from_timestamp(data.sys.sunset + data.timezone, 0).format("%H:%M");
+        let timestamp =
+            NaiveDateTime::from_timestamp_opt(data.dt + data.timezone, 0).map(|t| t.format("%a %e %b %H:%M"));
+        let sunrise = NaiveDateTime::from_timestamp_opt(data.sys.sunrise + data.timezone, 0).map(|t| t.format("%H:%M"));
+        let sunset = NaiveDateTime::from_timestamp_opt(data.sys.sunset + data.timezone, 0).map(|t| t.format("%H:%M"));
 
         let weathers: Vec<String> = data.weather.iter().map(|s| s.description.clone()).collect();
         let temp = format!(
@@ -74,18 +77,26 @@ impl Module {
             direction,
         );
         let pressure = format!("{:.0} mb", data.main.pressure);
-        ctx.say(&format!(
-            "Weather for {}; Last updated {}; Conditions: {}; Temperature: {}; Humidity: {}%; Wind: {}; Pressure: {}; Sunrise: {}; Sunset: {}",
-            location,
-            timestamp,
-            weathers.join(", "),
-            temp,
-            data.main.humidity,
-            wind,
-            pressure,
-            sunrise,
-            sunset,
-        ))
+        let mut spans = spans! {
+            "Weather for ", location,
+        };
+        if let Some(ts) = timestamp {
+            spans.append(&mut spans! {"; Last updated ", ts.to_string()});
+        }
+        spans.append(&mut spans! {
+            "; Conditions: ", weathers.join(", "),
+            "; Temperature: ", temp,
+            "; Humidity: ", format!("{}%", data.main.humidity),
+            "; Wind: ", wind,
+            "; Pressure: ", pressure,
+        });
+        if let Some(sr) = sunrise {
+            spans.append(&mut spans! { "; Sunrise: ", sr.to_string() });
+        }
+        if let Some(ss) = sunset {
+            spans.append(&mut spans! { "; Sunset: ", ss.to_string() });
+        }
+        ctx.reply(Message::Spans(spans))
     }
 }
 
@@ -115,17 +126,20 @@ fn text_for_angle(angle: f64) -> String {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Coord {
     lat: f64,
     lon: f64,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Clouds {
     all: i64,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Main {
     humidity: i64,
     pressure: f64,
@@ -135,6 +149,7 @@ struct Main {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Sys {
     country: Option<String>,
     sunrise: i64,
@@ -142,6 +157,7 @@ struct Sys {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Weather {
     description: String,
     icon: String,
@@ -150,6 +166,7 @@ struct Weather {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Wind {
     deg: Option<f64>,
     gust: Option<f64>,
@@ -157,6 +174,7 @@ struct Wind {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 struct Response {
     base: String,
     clouds: Clouds,

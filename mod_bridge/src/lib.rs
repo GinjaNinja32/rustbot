@@ -90,7 +90,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
         if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
             (
                 &|user| span!(Format::Bold; "<{}>", user),
-                spans! {ctx.bot().dis_unprocess_message(conf, &format!("{}", g), &msg)?},
+                spans! {ctx.bot().dis_unprocess_message(conf, &format!("{}", g), msg)?},
             )
         } else if ctx.source().get_irc_params().is_some() {
             if msg.starts_with(1 as char) && msg.ends_with(1 as char) {

@@ -2,7 +2,6 @@ mod dice;
 mod swrpg;
 
 use rustbot::prelude::*;
-use rustbot::{spans, spans_plural};
 
 #[no_mangle]
 pub fn get_meta(meta: &mut dyn Meta) {

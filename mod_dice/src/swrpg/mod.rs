@@ -39,8 +39,7 @@ pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
     let results: Vec<_> = expr
         .0
         .iter()
-        .map(|(n, die)| (0..*n).map(move |_| die.options().choose(&mut rand::thread_rng()).unwrap().clone()))
-        .flatten()
+        .flat_map(|(n, die)| (0..*n).map(move |_| die.options().choose(&mut rand::thread_rng()).unwrap().clone()))
         .collect();
 
     let mut total = DR_ZERO;

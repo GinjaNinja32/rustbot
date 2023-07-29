@@ -81,7 +81,7 @@ impl Rustbot {
                 typ |= HandleType::Public
             }
 
-            let source = context::IRC {
+            let source = context::Irc {
                 prefix: irc_parse_prefix(irc_msg.prefix),
                 channel: if channel == bot_name { None } else { Some(channel) },
             };
@@ -162,10 +162,10 @@ impl Rustbot {
                 }
                 for field in embed.fields {
                     if field.inline {
-                        data.push(format!("{}: {}", field.name, field.value.replace("\n", "\t")))
+                        data.push(format!("{}: {}", field.name, field.value.replace('\n', "\t")))
                     } else {
                         data.push(format!("{}:", field.name));
-                        for line in field.value.split("\n") {
+                        for line in field.value.split('\n') {
                             data.push(format!("\t{}", line));
                         }
                     }
@@ -599,7 +599,7 @@ impl types::Bot for Rustbot {
     fn dis_unprocess_message(&self, config: &str, guild: &str, message: &str) -> Result<String> {
         let cache_and_http = match self.caches.read().get(config) {
             None => bail!("no cache found for config {:?}", config),
-            Some(c) => Arc::clone(&c),
+            Some(c) => Arc::clone(c),
         };
 
         let cache = cache_and_http.cache.read();
@@ -643,7 +643,7 @@ impl types::Bot for Rustbot {
     fn dis_send_message(&self, config: &str, guild: &str, channel: &str, message: &str, process: bool) -> Result<()> {
         let cache_and_http = match self.caches.read().get(config) {
             None => bail!("no cache found for config {:?}", config),
-            Some(c) => Arc::clone(&c),
+            Some(c) => Arc::clone(c),
         };
 
         let cache = cache_and_http.cache.read();
@@ -978,7 +978,7 @@ fn run_with_backoff(desc: &str, f: &dyn Fn() -> Result<()>) {
     }
 }
 
-fn irc_descriptor(c: &config::IRC) -> String {
+fn irc_descriptor(c: &config::Irc) -> String {
     format!("{} ({}:{})", c.id, c.server, c.port,)
 }
 

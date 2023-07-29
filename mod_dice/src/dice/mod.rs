@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use rustbot::prelude::Span;
-use rustbot::spans;
 
 mod ast;
 mod value;
@@ -19,8 +18,7 @@ pub mod limits {
             let entropy = match options
                 .checked_next_power_of_two()
                 .map(|v| v.trailing_zeros())
-                .map(|v| count.checked_mul(v as u64))
-                .flatten()
+                .and_then(|v| count.checked_mul(v as u64))
             {
                 Some(v) => v,
                 None => return Err("overflow calculating entropy".to_string()),

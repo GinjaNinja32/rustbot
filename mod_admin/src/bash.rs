@@ -10,9 +10,9 @@ pub fn bashl(ctx: &dyn Context, args: &str) -> Result<()> {
 }
 
 fn format_output(raw: &[u8], oneline: bool) -> Result<String> {
-    let mut out = std::str::from_utf8(raw)?.trim_end().to_string().replace("\r", "");
+    let mut out = std::str::from_utf8(raw)?.trim_end().to_string().replace('\r', "");
     if oneline {
-        out = out.replace("\n", "\x0314;\x03 ");
+        out = out.replace('\n', "\x0314;\x03 ");
     }
 
     Ok(out)

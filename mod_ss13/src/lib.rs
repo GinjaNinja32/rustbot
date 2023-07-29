@@ -18,7 +18,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("ss13pullrepo", Command::new(updates::pull_repo));
 }
 
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! build_message {
     ($resp:ident, $fmt:literal, $($name:ident),*) => {
         {

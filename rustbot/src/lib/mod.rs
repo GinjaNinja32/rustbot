@@ -1,8 +1,7 @@
 #[macro_use]
 extern crate bitflags;
-extern crate regex;
-#[macro_use]
 extern crate nom;
+extern crate regex;
 
 // These may or may not be used in librustbot itself, but they're each used by one or more modules;
 // these these declarations force the compiler to put them in librustbot.so rather than duplicating

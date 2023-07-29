@@ -8,7 +8,7 @@ use rustbot::prelude::*;
 pub struct Config {
     pub postgres: Postgres,
 
-    pub irc: Vec<IRC>,
+    pub irc: Vec<Irc>,
     pub discord: Vec<Discord>,
 
     pub module: BTreeMap<String, toml::Value>,
@@ -25,7 +25,7 @@ pub struct Postgres {
 }
 
 #[derive(Deserialize)]
-pub struct IRC {
+pub struct Irc {
     pub id: String,
 
     pub nick: String,

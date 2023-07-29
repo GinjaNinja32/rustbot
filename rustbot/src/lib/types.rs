@@ -1,6 +1,5 @@
 #![allow(non_upper_case_globals)]
 
-use log::Level;
 use parking_lot::Mutex;
 use postgres::types::FromSql;
 use std::borrow::Cow;
@@ -417,7 +416,7 @@ mod private {
 
     pub trait SealedClone {}
 
-    impl<'a, T: Sealed + Clone> SealedClone for T {}
+    impl<T: Sealed + Clone> SealedClone for T {}
 }
 
 pub trait MoveToVecSpan<'a>: private::Sealed {
