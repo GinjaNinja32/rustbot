@@ -6,11 +6,11 @@ edition = "2018"
 
 [[bin]]
 name = "rustbot"
-path = "src/main.rs"
+path = "src/main/mod.rs"
 
 [lib]
 name = "rustbot"
-path = "src/lib.rs"
+path = "src/lib/mod.rs"
 crate-type = ["dylib"]
 
 [dependencies]

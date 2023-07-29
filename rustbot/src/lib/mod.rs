@@ -20,7 +20,7 @@ pub mod types;
 pub mod utils;
 
 #[cfg(test)]
-mod libtest;
+mod test;
 
 pub mod prelude {
     pub use crate::bail_user;

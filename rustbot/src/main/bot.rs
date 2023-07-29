@@ -20,11 +20,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::config;
-use crate::context;
-use crate::context::Prefix;
-use crate::db;
-use crate::message;
+use super::config;
+use super::context;
+use super::context::Prefix;
+use super::core;
+use super::db;
+use super::message;
 use rustbot::prelude::*;
 use rustbot::types;
 
@@ -33,7 +34,7 @@ pub struct Rustbot {
     caches: RwLock<BTreeMap<String, Arc<serenity::CacheAndHttp>>>,
     db: Mutex<postgres::Client>,
     modules: RwLock<BTreeMap<String, Module>>,
-    core_commands: RwLock<BTreeMap<String, (Perms, Box<crate::core::CoreCommand>)>>,
+    core_commands: RwLock<BTreeMap<String, (Perms, Box<core::CoreCommand>)>>,
     commands: RwLock<BTreeMap<String, (String, Command)>>,
     logger: Mutex<LogInfo>,
 
@@ -858,7 +859,7 @@ pub fn start() -> Result<()> {
         caches: RwLock::new(BTreeMap::new()),
         db: Mutex::new(db::open(&config.postgres)?),
         modules: RwLock::new(BTreeMap::new()),
-        core_commands: RwLock::new(crate::core::get_commands()),
+        core_commands: RwLock::new(core::get_commands()),
         commands: RwLock::new(BTreeMap::new()),
         logger: Mutex::new(LogInfo {
             logger,
