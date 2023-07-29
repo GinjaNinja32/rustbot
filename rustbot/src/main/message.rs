@@ -11,14 +11,14 @@ fn paste(text: &str) -> Result<String> {
 
     {
         let stdin = cmd.stdin.take();
-        write!(stdin.unwrap(), "{}", text)?;
+        write!(stdin.unwrap(), "{text}")?;
     }
 
     cmd.wait().expect("failed to wait for paste");
 
     let url = {
         let stdout = cmd.stdout.take();
-        let mut url = "".to_string();
+        let mut url = String::new();
         stdout.unwrap().read_to_string(&mut url)?;
         url
     };
@@ -26,22 +26,22 @@ fn paste(text: &str) -> Result<String> {
     Ok(format!("[full message: {}]", url.trim()))
 }
 
-fn paste_max_lines(input: String, max_lines: usize) -> Result<(Vec<String>, Option<String>)> {
+fn paste_max_lines(input: &str, max_lines: usize) -> Result<(Vec<String>, Option<String>)> {
     let lines: Vec<String> = input.split('\n').map(std::string::ToString::to_string).collect();
     if lines.len() > max_lines {
         let v = lines[0..max_lines - 1].to_vec();
-        Ok((v, Some(paste(&input)?)))
+        Ok((v, Some(paste(input)?)))
     } else {
         Ok((lines, None))
     }
 }
 
-fn render_irc(spans: Vec<Span>) -> String {
+fn render_irc(spans: &[Span]) -> String {
     let mut col = Color::None;
     let mut fmt = Format::None;
-    let mut st = "".to_string();
+    let mut st = String::new();
 
-    for sp in &spans {
+    for sp in spans {
         match sp {
             Span::Text {
                 ref text,
@@ -66,20 +66,17 @@ fn render_irc(spans: Vec<Span>) -> String {
                 }
 
                 if color != col {
-                    match color {
-                        Color::None => {
-                            if format == fmt && text.starts_with(|c: char| c.is_ascii_digit()) {
-                                st.push_str("\x03\x02\x02")
-                            } else {
-                                st.push('\x03')
-                            }
+                    if color == Color::None {
+                        if format == fmt && text.starts_with(|c: char| c.is_ascii_digit()) {
+                            st.push_str("\x03\x02\x02");
+                        } else {
+                            st.push('\x03');
                         }
-                        _ => {
-                            let code = format!("\x03{:02}", color as u8);
-                            st.push_str(&code);
-                            if format == fmt && text.starts_with(',') {
-                                st.push_str("\x02\x02");
-                            }
+                    } else {
+                        let code = format!("\x03{:02}", color as u8);
+                        st.push_str(&code);
+                        if format == fmt && text.starts_with(',') {
+                            st.push_str("\x02\x02");
                         }
                     }
                     col = color;
@@ -116,12 +113,12 @@ fn render_irc(spans: Vec<Span>) -> String {
 pub fn format_irc(m: Message) -> Result<Vec<String>> {
     let msg = match m {
         Message::Simple(s) | Message::Code(s) => s,
-        Message::Spans(s) => render_irc(s),
+        Message::Spans(s) => render_irc(&s),
         Message::Prefixed(p, s) => {
-            let p = render_irc(p);
-            let s = render_irc(s);
+            let p = render_irc(&p);
+            let s = render_irc(&s);
 
-            let (vec, link) = paste_max_lines(s, 3)?;
+            let (vec, link) = paste_max_lines(&s, 3)?;
 
             let mut vec = vec.iter().map(|line| p.clone() + line).collect::<Vec<_>>();
             if let Some(link) = link {
@@ -154,7 +151,7 @@ pub fn format_irc(m: Message) -> Result<Vec<String>> {
         }
     };
 
-    match paste_max_lines(msg, 3)? {
+    match paste_max_lines(&msg, 3)? {
         (vec, None) => Ok(vec),
         (mut vec, Some(link)) => {
             vec.push(link);
@@ -169,7 +166,7 @@ fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
             if *format == Format::None {
                 return text.clone();
             }
-            let mut formats = "".to_string();
+            let mut formats = String::new();
             if format.contains(Format::Italic) {
                 formats += "*";
             }
@@ -187,11 +184,11 @@ fn render_dis<'a>(s: &'a Span) -> Cow<'a, str> {
                 formats.chars().rev().collect::<String>()
             ))
         }
-        Span::DiscordEmoji(name, id) => Cow::Owned(format!("<:{}:{}>", name, id)),
+        Span::DiscordEmoji(name, id) => Cow::Owned(format!("<:{name}:{id}>")),
     }
 }
 
-fn render_dis_spans(s: Vec<Span>) -> String {
+fn render_dis_spans(s: &[Span]) -> String {
     s.iter().map(render_dis).collect::<Vec<Cow<str>>>().join("")
 }
 
@@ -199,15 +196,15 @@ pub fn format_discord(m: Message) -> Result<String> {
     let (msg, code) = match m {
         Message::Simple(s) => (s, false),
         Message::Code(s) => (s, true),
-        Message::Spans(s) => (render_dis_spans(s), false),
+        Message::Spans(s) => (render_dis_spans(&s), false),
         Message::Prefixed(p, s) => {
-            let p = render_dis_spans(p);
-            let s = render_dis_spans(s);
+            let p = render_dis_spans(&p);
+            let s = render_dis_spans(&s);
 
-            let (res, url) = paste_max_lines(s, 11)?;
+            let (res, url) = paste_max_lines(&s, 11)?;
             let mut res = res.iter().map(|line| p.clone() + line).collect::<Vec<_>>();
             if let Some(u) = url {
-                res.push(u)
+                res.push(u);
             }
             return Ok(res.join("\n"));
         }
@@ -215,9 +212,9 @@ pub fn format_discord(m: Message) -> Result<String> {
     };
 
     if code && !msg.contains('\n') {
-        Ok(format!("`{}`", msg))
+        Ok(format!("`{msg}`"))
     } else {
-        let (mut res, url) = paste_max_lines(msg, 11)?;
+        let (mut res, url) = paste_max_lines(&msg, 11)?;
         if let Some(u) = url {
             res.push(u);
         }

@@ -39,7 +39,7 @@ fn exec(ctx: &Context, args: &str, what: fn(&Context, &str) -> Result<()>) -> Re
         }
         match what(ctx, m) {
             Ok(()) => Ok(()),
-            Err(e) => ctx.say(&format!("{} failed: {}", m, e)),
+            Err(e) => ctx.say(&format!("{m} failed: {e}")),
         }?;
     }
     ctx.say("done")
@@ -86,7 +86,7 @@ fn recompile(ctx: &Context, args: &str) -> Result<()> {
                 ctx.reply(Message::Code(lines.join("\n")))
             }
         }
-        Err(e) => ctx.say(&format!("failed to run build: {}", e)),
+        Err(e) => ctx.say(&format!("failed to run build: {e}")),
     }
 }
 

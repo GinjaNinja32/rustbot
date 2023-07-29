@@ -11,19 +11,19 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Self::Int(i) => write!(f, "{}", i),
+            Self::Int(i) => write!(f, "{i}"),
             Self::IntSlice(s) => {
                 if s.len() <= 10 {
-                    let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
+                    let strs: Vec<String> = s.iter().map(|v| format!("{v}")).collect();
                     write!(f, "[{}]", strs.join(", "))
                 } else {
                     write!(f, "[{} ints, total {}]", s.len(), s.iter().sum::<i64>())
                 }
             }
-            Self::Bool(b) => write!(f, "{}", b),
+            Self::Bool(b) => write!(f, "{b}"),
             Self::BoolSlice(s) => {
                 if s.len() <= 10 {
-                    let strs: Vec<String> = s.iter().map(|v| format!("{}", v)).collect();
+                    let strs: Vec<String> = s.iter().map(|v| format!("{v}")).collect();
                     write!(f, "[{}]", strs.join(", "))
                 } else {
                     write!(f, "[{} bools, {} true]", s.len(), s.iter().filter(|v| **v).count())
@@ -45,10 +45,10 @@ impl Value {
     }
     pub fn to_int_slice(&self) -> Result<Vec<i64>, String> {
         match self {
-            Self::Int(i) => Err(format!("cannot convert {} to slice", i)),
-            Self::IntSlice(s) => Ok(s.to_vec()),
-            Self::Bool(b) => Err(format!("cannot convert {} to slice", b)),
-            Self::BoolSlice(s) => Ok(s.iter().map(|&v| if v { 1 } else { 0 }).collect()),
+            Self::Int(i) => Err(format!("cannot convert {i} to slice")),
+            Self::IntSlice(s) => Ok(s.clone()),
+            Self::Bool(b) => Err(format!("cannot convert {b} to slice")),
+            Self::BoolSlice(s) => Ok(s.iter().map(|&v| i64::from(v)).collect()),
         }
     }
 }

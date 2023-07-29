@@ -1,5 +1,5 @@
 use crate::build_message;
-use crate::utils::*;
+use crate::utils::{get_topic_map, parse_urlencoded, render_fields, resolve_server};
 use rustbot::prelude::*;
 use rustbot::{span, spans};
 use std::collections::BTreeMap;
@@ -136,7 +136,7 @@ pub(crate) fn manifest(ctx: &dyn Context, args: &str) -> Result<()> {
                 span!(Format::Bold; dept),
                 ": ",
                 list.iter()
-                    .map(|(name, job)| format!("{}: {}", name, job))
+                    .map(|(name, job)| format!("{name}: {job}"))
                     .collect::<Vec<_>>()
                     .join("; ")
             ]);

@@ -17,8 +17,8 @@ pub mod limits {
         pub fn use_entropy(&mut self, count: u64, options: u64) -> Result<(), String> {
             let entropy = match options
                 .checked_next_power_of_two()
-                .map(|v| v.trailing_zeros())
-                .and_then(|v| count.checked_mul(v as u64))
+                .map(u64::trailing_zeros)
+                .and_then(|v| count.checked_mul(u64::from(v)))
             {
                 Some(v) => v,
                 None => return Err("overflow calculating entropy".to_string()),
@@ -43,7 +43,7 @@ pub trait Evaluable {
 }
 
 pub fn parse(input: &str) -> Result<ast::Command, String> {
-    ast::command(input).map(|(_, c)| c).map_err(|e| format!("{:?}", e))
+    ast::command(input).map(|(_, c)| c).map_err(|e| format!("{e:?}"))
 }
 
 pub fn eval(cmd: &ast::Command, mut limit: limits::Limiter) -> Result<Vec<Span>, String> {

@@ -11,7 +11,7 @@ use regex::Regex;
 use serde::Deserialize;
 use serenity::model::channel;
 use serenity::model::guild;
-use serenity::model::id::*;
+use serenity::model::id::{ChannelId, GuildId};
 use serenity::prelude as dis;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -76,9 +76,9 @@ impl Rustbot {
             let mut typ = HandleType::PlainMsg;
 
             if channel == bot_name {
-                typ |= HandleType::Private
+                typ |= HandleType::Private;
             } else {
-                typ |= HandleType::Public
+                typ |= HandleType::Public;
             }
 
             let source = Source::Irc {
@@ -126,7 +126,7 @@ impl Rustbot {
                 cache: disctx.cache,
                 http: disctx.http,
             },
-            bot_name: "".to_string(),
+            bot_name: String::new(),
         };
 
         if !msg.content.is_empty() {
@@ -152,7 +152,7 @@ impl Rustbot {
                 }
                 if let Some(title) = embed.title {
                     if let Some(url) = embed.url {
-                        data.push(format!("{} <{}>", title, url));
+                        data.push(format!("{title} <{url}>"));
                     } else {
                         data.push(title);
                     }
@@ -162,11 +162,11 @@ impl Rustbot {
                 }
                 for field in embed.fields {
                     if field.inline {
-                        data.push(format!("{}: {}", field.name, field.value.replace('\n', "\t")))
+                        data.push(format!("{}: {}", field.name, field.value.replace('\n', "\t")));
                     } else {
                         data.push(format!("{}:", field.name));
                         for line in field.value.split('\n') {
-                            data.push(format!("\t{}", line));
+                            data.push(format!("\t{line}"));
                         }
                     }
                 }
@@ -183,9 +183,9 @@ impl Rustbot {
                     spans.push(format!("╽ {}", data.remove(0)));
                     let lastline = data.remove(data.len() - 1);
                     for line in data {
-                        spans.push(format!("┃ {}", line));
+                        spans.push(format!("┃ {line}"));
                     }
-                    spans.push(format!("╿ {}", lastline));
+                    spans.push(format!("╿ {lastline}"));
                 }
 
                 self.handle(ctx, HandleType::Embed | typ, &spans.join("\n"));
@@ -203,8 +203,8 @@ impl Rustbot {
         match match err.downcast::<UserError>() {
             Ok(ue) => {
                 // It's a UserError, so try to inform the user
-                ctx.say(&format!("command failed: {}", ue))
-                    .with_context(|| format!("failed to inform user of error {}", ue))
+                ctx.say(&format!("command failed: {ue}"))
+                    .with_context(|| format!("failed to inform user of error {ue}"))
             }
             Err(e) => {
                 // It's a backend error; let the user know _something_ happened, but print the main
@@ -255,14 +255,14 @@ impl Rustbot {
 
                 if let Some((p, f)) = self.core_commands.read().get(&cmd) {
                     if ctx.perms()?.contains(*p) {
-                        f(ctx, &args).with_context(|| format!("failed to run command {:?}", cmd))?;
+                        f(ctx, &args).with_context(|| format!("failed to run command {cmd:?}"))?;
                     }
                 } else {
                     let res = self.commands.read().get(&cmd).cloned();
                     if let Some((m, f)) = res {
                         if enabled.contains(&m) {
                             f.call(ctx, &args)
-                                .with_context(|| format!("failed to run command {:?}", cmd))?;
+                                .with_context(|| format!("failed to run command {cmd:?}"))?;
                         }
                     }
                 }
@@ -278,7 +278,7 @@ impl Rustbot {
                     for (ty, handler) in &meta.handlers {
                         if ty.contains(typ) {
                             self.maybe_ignore_err(&name, handler(ctx, typ, message), ())
-                                .with_context(|| format!("failed to run handler for module {:?}", name))?;
+                                .with_context(|| format!("failed to run handler for module {name:?}"))?;
                         }
                     }
                     Ok(())
@@ -337,13 +337,9 @@ impl Rustbot {
             match transform {
                 ArgumentTransform::RegexReplace { find, replace, global } => {
                     let re = Regex::new(find)?;
-                    args = re
-                        .replacen(
-                            args.as_str(),
-                            if global.unwrap_or(false) { 0 } else { 1 },
-                            replace.as_str(),
-                        )
-                        .into_owned();
+                    let n = usize::from(!global.unwrap_or(false));
+
+                    args = re.replacen(args.as_str(), n, replace.as_str()).into_owned();
                 }
                 ArgumentTransform::ByIndex(t) => {
                     let new_args = {
@@ -354,14 +350,14 @@ impl Rustbot {
                                 Index::Single(0) => new_args.extend_from_slice(&indexed),
                                 Index::Single(n) => new_args.push(indexed.get((n - 1) as usize).unwrap_or(&"")),
                                 Index::Multi(n) => {
-                                    new_args.extend_from_slice(indexed.get((-n - 1) as usize..).unwrap_or(&[]))
+                                    new_args.extend_from_slice(indexed.get((-n - 1) as usize..).unwrap_or(&[]));
                                 }
                                 Index::Literal(s) => new_args.push(s),
                             }
                         }
                         new_args.join(" ")
                     };
-                    args = new_args
+                    args = new_args;
                 }
             }
         }
@@ -370,24 +366,23 @@ impl Rustbot {
     }
 
     fn dis_get_replacements(
-        &self,
         guild: impl std::ops::Deref<Target = guild::Guild>,
         reverse: bool,
     ) -> Vec<(String, String)> {
         let mut replacements = vec![];
         for (id, m) in &guild.members {
-            replacements.push((format!("@{}", m.user.read().name), format!("<@{}>", id)));
+            replacements.push((format!("@{}", m.user.read().name), format!("<@{id}>")));
             if reverse {
-                replacements.push((format!("@{}", m.user.read().name), format!("<@!{}>", id)));
+                replacements.push((format!("@{}", m.user.read().name), format!("<@!{id}>")));
             }
         }
 
         for (id, r) in &guild.roles {
-            replacements.push((format!("@{}", r.name), format!("<@&{}>", id)));
+            replacements.push((format!("@{}", r.name), format!("<@&{id}>")));
         }
 
         for (id, c) in &guild.channels {
-            replacements.push((format!("#{}", c.read().name), format!("<#{}>", id)));
+            replacements.push((format!("#{}", c.read().name), format!("<#{id}>")));
         }
 
         for (id, e) in &guild.emojis {
@@ -427,7 +422,7 @@ impl Rustbot {
                     f(self)?;
                 }
                 for thread in meta.threads.drain(..) {
-                    thread.join().map_err(|e| Error::msg(format!("{:?}", e)))?;
+                    thread.join().map_err(|e| Error::msg(format!("{e:?}")))?;
                 }
                 Ok(())
             })?;
@@ -440,9 +435,9 @@ impl Rustbot {
     pub fn load_module(&self, name: &str) -> Result<()> {
         info!("load module: {}", name);
         let libpath = if cfg!(debug_assertions) {
-            format!("libmod_{}.so", name)
+            format!("libmod_{name}.so")
         } else {
-            format!("target/release/libmod_{}.so", name)
+            format!("target/release/libmod_{name}.so")
         };
         let lib = Library::new(libpath)?;
 
@@ -501,7 +496,7 @@ impl Rustbot {
         for (m, l) in &modules {
             let level = l.parse::<Level>()?;
 
-            builder.module(&format!("mod_{}", m), level.to_level_filter());
+            builder.module(&format!("mod_{m}"), level.to_level_filter());
         }
 
         info!("setting logger spec: {:?}", builder);
@@ -623,7 +618,7 @@ impl types::Bot for Rustbot {
         .ok_or_else(|| Error::msg("guild not found"))?
         .read();
 
-        let mut replacements = self.dis_get_replacements(guildobj, true);
+        let mut replacements = Self::dis_get_replacements(guildobj, true);
 
         replacements.sort_by(|l, r| {
             if l.1.len() != r.1.len() {
@@ -688,7 +683,7 @@ impl types::Bot for Rustbot {
         if process {
             let mut message = message.to_string();
 
-            let mut replacements = self.dis_get_replacements(guildobj, false);
+            let mut replacements = Self::dis_get_replacements(guildobj, false);
 
             replacements.sort_by(|l, r| {
                 if l.0.len() != r.0.len() {
@@ -808,7 +803,9 @@ pub(crate) fn truncate_module_path(s: &str, n: usize) -> Cow<'_, str> {
             // Part of this segment will fit
             let fitting_part = &parts[i][..n - len_so_far - 1];
 
-            if i + 1 != parts.len() {
+            if i + 1 == parts.len() {
+                return format!("{first}{first_to_this}{fitting_part}~").into();
+            } else {
                 return format!(
                     "{}{}{}~::{}",
                     first,
@@ -817,8 +814,6 @@ pub(crate) fn truncate_module_path(s: &str, n: usize) -> Cow<'_, str> {
                     parts[i + 1..].join("::")
                 )
                 .into();
-            } else {
-                return format!("{}{}{}~", first, first_to_this, fitting_part).into();
             }
         }
 
@@ -840,10 +835,10 @@ pub fn start() -> Result<()> {
                 "{} {:5} {:>mod_len$}:{}: {}",
                 now.now().format("%Y-%m-%d %H:%M:%S%.3f"),
                 record.level(),
-                record
-                    .module_path()
-                    .map(|e| truncate_module_path(e, LOG_MODULE_PATH_MAX_LEN))
-                    .unwrap_or_else(|| "<unnamed>".into()),
+                record.module_path().map_or_else(
+                    || "<unnamed>".into(),
+                    |e| truncate_module_path(e, LOG_MODULE_PATH_MAX_LEN)
+                ),
                 record.line().unwrap_or(0),
                 &record.args(),
                 mod_len = LOG_MODULE_PATH_MAX_LEN,
@@ -1057,10 +1052,10 @@ impl types::Meta for Meta {
         self.commands.insert(name.to_string(), cmd);
     }
     fn deinit(&mut self, f: Box<DeinitFn>) {
-        self.deinit = Some(f)
+        self.deinit = Some(f);
     }
     fn handle(&mut self, typ: HandleType, f: Box<MsgHandlerFn>) {
-        self.handlers.push((typ, f))
+        self.handlers.push((typ, f));
     }
     fn on_unload_channel(&mut self) -> Receiver<()> {
         let (send, recv) = oneshot::channel();
@@ -1074,5 +1069,5 @@ impl types::Meta for Meta {
 }
 
 fn from_irc(e: ::irc::error::IrcError) -> Error {
-    Error::msg(format!("{}", e))
+    Error::msg(format!("{e}"))
 }

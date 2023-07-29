@@ -62,7 +62,7 @@ fn bridge(ctx: &dyn Context, args: &str) -> Result<()> {
             &[&ctx.config_id(), &ctx.source().channel_string(), &args],
         )?;
 
-        ctx.say(&format!("bridge key set to '{}'", args))
+        ctx.say(&format!("bridge key set to '{args}'"))
     }
 }
 
@@ -86,7 +86,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
         if let Some((Some(g), _, _)) = ctx.source().get_discord_params() {
             (
                 &|user| span!(Format::Bold; "<{}>", user),
-                spans! {ctx.bot().dis_unprocess_message(conf, &format!("{}", g), msg)?},
+                spans! {ctx.bot().dis_unprocess_message(conf, &format!("{g}"), msg)?},
             )
         } else if ctx.source().get_irc_params().is_some() {
             if msg.starts_with(1 as char) && msg.ends_with(1 as char) {
@@ -110,7 +110,7 @@ fn do_bridge(ctx: &dyn Context, _typ: HandleType, msg: &str) -> Result<()> {
             (&|user| span!(Format::Bold; "<{}>", user), spans! {msg})
         };
 
-    for row in chans.iter() {
+    for row in &chans {
         let tconf = row.get::<_, String>(0);
         let tchan = row.get::<_, String>(1);
 

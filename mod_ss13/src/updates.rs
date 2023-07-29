@@ -1,4 +1,4 @@
-use crate::utils::*;
+use crate::utils::{get_topic_map, resolve_server};
 use rustbot::prelude::*;
 use std::process::Command;
 

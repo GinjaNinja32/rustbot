@@ -46,8 +46,7 @@ pub fn irc_parse(s: &str) -> Vec<Span> {
                             fg = str::parse::<u8>(m.get(1).unwrap().as_str()).unwrap().into();
                             bg = m
                                 .get(3)
-                                .map(|v| str::parse::<u8>(v.as_str()).unwrap().into())
-                                .unwrap_or(Color::None)
+                                .map_or(Color::None, |v| str::parse::<u8>(v.as_str()).unwrap().into())
                         }
                     },
                     IRC_RESET => {

@@ -32,7 +32,7 @@ fn do_bash(ctx: &dyn Context, args: &str, oneline: bool) -> Result<()> {
 
     let err = format_output(&result.stderr, oneline)?;
     if !err.is_empty() {
-        ctx.reply(Message::Code(format!("stderr: {}", err)))?;
+        ctx.reply(Message::Code(format!("stderr: {err}")))?;
     }
 
     Ok(())

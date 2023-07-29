@@ -113,7 +113,7 @@ pub(crate) fn render_fields(data: &BTreeMap<String, Cow<'_, str>>, fields: &[(&s
 
     for (name, key) in fields {
         if let Some(val) = data.get(*key) {
-            v.push(format!("{}: {}", name, val));
+            v.push(format!("{name}: {val}"));
         }
     }
 
@@ -130,7 +130,7 @@ pub(crate) struct ResolvedServer<'a> {
 pub(crate) fn resolve_server<'a>(ctx: &dyn Context, args: &'a str) -> Result<ResolvedServer<'a>> {
     if let Some(s) = args.strip_prefix("byond://") {
         return Ok(ResolvedServer {
-            prefix: format!("(byond://{}) ", s).into(),
+            prefix: format!("(byond://{s}) ").into(),
             id: None,
             address: s.into(),
             git_data: None,
@@ -171,7 +171,7 @@ pub(crate) fn resolve_server<'a>(ctx: &dyn Context, args: &'a str) -> Result<Res
         prefix: if args.is_empty() {
             "".into()
         } else {
-            format!("({}) ", id).into()
+            format!("({id}) ").into()
         },
         id: Some(id.into()),
         address: address.into(),

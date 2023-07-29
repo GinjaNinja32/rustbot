@@ -87,6 +87,7 @@ impl<'a> types::Context for Context<'a> {
                 };
                 Ok(perms)
             }
+            Source::Irc { .. } => Ok(Perms::None),
             Source::Discord { user, .. } => {
                 let perms: Perms = match self.bot.sql().lock().query(
                     "SELECT flags FROM dis_permissions WHERE config_id = $1 AND user_id = $2",
@@ -106,7 +107,6 @@ impl<'a> types::Context for Context<'a> {
                 };
                 Ok(perms)
             }
-            _ => Ok(Perms::None),
         }
     }
 }
@@ -132,7 +132,7 @@ impl types::Source for Source {
         match self {
             Source::Irc { prefix, .. } => {
                 if let Some(prefix) = prefix {
-                    format!("{}", prefix).into()
+                    format!("{prefix}").into()
                 } else {
                     "none".into()
                 }
@@ -158,7 +158,7 @@ impl types::Source for Source {
         match self {
             Source::Irc { channel, .. } => {
                 if let Some(channel) = channel {
-                    format!("irc:{}", channel)
+                    format!("irc:{channel}")
                 } else {
                     "irc:query".to_string()
                 }
@@ -207,8 +207,8 @@ pub enum Prefix {
 impl std::fmt::Display for Prefix {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         match self {
-            Self::Server(s) => write!(f, "{}", s),
-            Self::User { nick, user, host } => write!(f, "{}!{}@{}", nick, user, host),
+            Self::Server(s) => write!(f, "{s}"),
+            Self::User { nick, user, host } => write!(f, "{nick}!{user}@{host}"),
         }
     }
 }

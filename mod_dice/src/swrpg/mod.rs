@@ -2,7 +2,13 @@ use rand::seq::SliceRandom;
 use rustbot::prelude::{span_join, Format, Span};
 use rustbot::{span, spans};
 
-use nom::{branch::*, bytes::complete::*, combinator::*, multi::*, sequence::*};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while},
+    combinator::{eof, map_res, opt},
+    multi::{many0, many1},
+    sequence::{preceded, tuple},
+};
 use nom::{IResult, Parser};
 
 mod emoji;
@@ -32,9 +38,9 @@ fn format_single<'a>(n: i8, emoji: Span<'static>, string: &'a str, pl: &'a str) 
 }
 
 pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
-    let expr = line(&format!("{}\n", input))
+    let expr = line(&format!("{input}\n"))
         .map(|(_, c)| c)
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     let results: Vec<_> = expr
         .0
@@ -142,8 +148,8 @@ fn line(i: &str) -> IResult<&str, Dice> {
         let mut v = vec![];
         v.extend_from_slice(&dice);
         if let Some(e) = extra {
-            v.extend_from_slice(&e)
-        };
+            v.extend_from_slice(&e);
+        }
         v
     };
 
@@ -354,5 +360,5 @@ const DR_LIGHT: DiceResult = DiceResult { light: 1, ..DR_ZERO };
 const DR_DARK: DiceResult = DiceResult { dark: 1, ..DR_ZERO };
 
 fn number(i: &str) -> IResult<&str, u8> {
-    map_res(take_while(|c: char| c.is_ascii_digit()), |s: &str| s.parse())(i)
+    map_res(take_while(|c: char| c.is_ascii_digit()), str::parse)(i)
 }

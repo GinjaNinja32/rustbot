@@ -33,10 +33,10 @@ fn cmd_space(ctx: &dyn Context, args: &str) -> Result<()> {
     }
 
     let (count, desc) = match args.find(' ') {
-        None => (args, "".to_string()),
+        None => (args, String::new()),
         Some(idx) => {
             let (count, desc) = args.split_at(idx);
-            (count, format!("{}: ", desc))
+            (count, format!("{desc}: "))
         }
     };
 

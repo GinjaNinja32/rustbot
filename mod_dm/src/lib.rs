@@ -40,9 +40,8 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
 /world/New()
     main()
     del(src)
-{}
-"#,
-                args
+{args}
+"#
             )
         } else {
             format!(
@@ -75,8 +74,7 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
         let mut value = main_lines[main_lines.len() - 1].to_string();
         if !value.is_empty() {
             value = format!(
-                "var/result = ({})\n    world.log << \"[istype(result, /list) ? json_encode(result) : result]\"",
-                value
+                "var/result = ({value})\n    world.log << \"[istype(result, /list) ? json_encode(result) : result]\""
             );
         }
 
@@ -102,13 +100,13 @@ fn dm(ctx: &dyn Context, args: &str, secure: bool, multiline: bool) -> Result<()
     hasher.write(code.as_bytes());
     let name = format!("{:x}", hasher.finish());
 
-    let mut file = File::create(format!("dm/{}.dme", name))?;
+    let mut file = File::create(format!("dm/{name}.dme"))?;
     file.write_all(code.as_bytes())?;
 
     let result = ProcessCommand::new("scripts/dm_compile_run.sh")
         .arg(&name)
-        .env("multiline", format!("{}", multiline))
-        .env("secure", format!("{}", secure))
+        .env("multiline", format!("{multiline}"))
+        .env("secure", format!("{secure}"))
         .output()?;
 
     let stdout = String::from_utf8(result.stdout)?;

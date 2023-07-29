@@ -8,7 +8,7 @@ pub fn query(ctx: &dyn Context, args: &str) -> Result<()> {
         let mut db = ctx.bot().sql().lock();
         let r = db.prepare(args).and_then(|stmt| {
             if stmt.columns().is_empty() {
-                db.execute(args, &[]).map(|n| format!("{} row(s) changed", n))
+                db.execute(args, &[]).map(|n| format!("{n} row(s) changed"))
             } else {
                 let cols: Vec<String> = stmt
                     .columns()

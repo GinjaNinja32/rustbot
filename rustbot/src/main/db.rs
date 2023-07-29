@@ -40,5 +40,5 @@ fn migrate(pc: &config::Postgres) -> Result<String> {
 }
 
 fn from_migrant(e: migrant_lib::Error) -> Error {
-    Error::msg(format!("{}", e))
+    Error::msg(format!("{e}"))
 }

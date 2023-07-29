@@ -87,6 +87,7 @@ macro_rules! spans_plural {
     }};
 }
 
+#[must_use]
 pub fn span_join<'a, M, C>(mut spans: Vec<M>, sep: C) -> Vec<Span<'a>>
 where
     M: MoveToVecSpan<'a>,
@@ -109,6 +110,7 @@ where
     v
 }
 
+#[must_use]
 pub fn span_split(spans: Vec<Span<'_>>, sep: char) -> Vec<Vec<Span<'_>>> {
     let mut ret = vec![];
     let mut cur = vec![];

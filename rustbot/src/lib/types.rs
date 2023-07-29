@@ -6,7 +6,7 @@ use postgres::types::{FromSql, Type};
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::error::*;
+use super::error::Result;
 use super::spans::Span;
 
 bitflags! {
@@ -22,11 +22,11 @@ bitflags! {
 
 impl std::fmt::Display for Perms {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{:?}", self)?;
+        write!(f, "{self:?}")?;
 
         let diff = self.bits & !Perms::all().bits;
         if diff != 0 {
-            write!(f, " | 0x{:x}", diff)?;
+            write!(f, " | 0x{diff:x}")?;
         }
 
         Ok(())
@@ -59,7 +59,7 @@ impl Command {
             req_perms: Perms::None,
         }
     }
-    pub fn req_perms(&self, p: Perms) -> Self {
+    #[must_use] pub fn req_perms(&self, p: Perms) -> Self {
         let mut s = self.clone();
         s.req_perms.insert(p);
         s

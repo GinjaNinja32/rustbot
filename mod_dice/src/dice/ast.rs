@@ -11,7 +11,14 @@ use super::limits::Limiter;
 use super::value::Value;
 use super::Evaluable;
 
-use nom::{branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while, take_while1},
+    character::complete::{anychar, multispace0},
+    combinator::{eof, map_res, opt},
+    multi::{many0, separated_list0, separated_list1},
+    sequence::{delimited, preceded, separated_pair, terminated, tuple},
+};
 use nom::{error::ParseError, IResult, Parser};
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
@@ -74,7 +81,7 @@ impl Command {
                                 spans.push(span! {format!("{}", v)});
                             }
                             None => {
-                                return Err(format!("binding ${} not defined", ch));
+                                return Err(format!("binding ${ch} not defined"));
                             }
                         },
                         OutputSegment::Plural(sg, pl) => {
@@ -98,7 +105,7 @@ fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
         preceded(
             tag("%"),
             alt((
-                tag("s").map(|_| OutputSegment::Plural("".into(), "s".into())),
+                tag("s").map(|_| OutputSegment::Plural(String::new(), "s".into())),
                 delimited(
                     tag("["),
                     separated_pair(
@@ -110,7 +117,7 @@ fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
                 )
                 .map(|(sg, pl)| OutputSegment::Plural(sg, pl)),
                 delimited(tag("["), take_while(|c| c != ']').map(String::from), tag("]"))
-                    .map(|pl| OutputSegment::Plural("".into(), pl)),
+                    .map(|pl| OutputSegment::Plural(String::new(), pl)),
             )),
         ),
         preceded(tag("$"), anychar).map(OutputSegment::Value),
@@ -325,7 +332,7 @@ impl Display for Explode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match self {
             Explode::Default => write!(f, "!"),
-            Explode::Target(t) => write!(f, "!{}", t),
+            Explode::Target(t) => write!(f, "!{t}"),
         }
     }
 }
@@ -427,7 +434,7 @@ impl DiceRoll {
                 };
 
                 if c < 0 {
-                    return Err(format!("tried to roll {} dice", c));
+                    return Err(format!("tried to roll {c} dice"));
                 }
 
                 let (ss, s) = match sv {
@@ -436,9 +443,9 @@ impl DiceRoll {
                         let opts: DiceOptions = match vv {
                             Value::Int(i) if i >= 1 => DiceOptions::Range(1, i),
                             Value::Int(0) => return Err("cannot roll a d0".to_string()),
-                            Value::Int(i) => return Err(format!("cannot roll a d({})", i)),
+                            Value::Int(i) => return Err(format!("cannot roll a d({i})")),
                             Value::IntSlice(s) => DiceOptions::Vector(s),
-                            Value::Bool(b) => return Err(format!("cannot roll a d{}", b)),
+                            Value::Bool(b) => return Err(format!("cannot roll a d{b}")),
                             Value::BoolSlice(_) => return Err("cannot roll a d[list of bool]".to_string()),
                         };
                         (vs, opts)
@@ -496,7 +503,7 @@ impl DiceRoll {
 
                 let exp_str: Cow<str> = match ex {
                     None => "".into(),
-                    Some(exp) => format!("{}", exp).into(),
+                    Some(exp) => format!("{exp}").into(),
                 };
                 Ok((spans!(cs, "d", ss, exp_str), Value::IntSlice(results)))
             }
@@ -554,7 +561,7 @@ impl Evaluable for AstValue {
             AstValue::Hundred => Ok((spans!("%"), Value::Int(100))),
             AstValue::Binding(ch) => match values.get(ch) {
                 Some(v) => Ok((spans!("$", format!("{}", ch)), v.clone())),
-                None => Err(format!("binding ${} not defined", ch)),
+                None => Err(format!("binding ${ch} not defined")),
             },
         }
     }
@@ -644,7 +651,7 @@ pub struct CompareOp {
 impl CompareOp {
     fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
         self._apply(&left, &right)
-            .map_err(|e| format!("cannot compare {} {} {}: {}", left, self, right, e))
+            .map_err(|e| format!("cannot compare {left} {self} {right}: {e}"))
     }
     fn _apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
         let result = match (self.each_left, self.each_right) {
@@ -791,5 +798,5 @@ impl Display for ModOp {
 }
 
 fn number(i: &str) -> IResult<&str, i64> {
-    map_res(take_while(|c: char| c.is_ascii_digit()), |s: &str| s.parse())(i)
+    map_res(take_while(|c: char| c.is_ascii_digit()), str::parse)(i)
 }

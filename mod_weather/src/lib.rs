@@ -34,12 +34,12 @@ impl Module {
         match result.status().as_u16() {
             200 => (),
             404 => return ctx.say("could not find location"),
-            code => return ctx.say(&format!("error {}", code)),
+            code => return ctx.say(&format!("error {code}")),
         }
 
         let text = result.text()?;
         let data: Response =
-            serde_json::from_str(&text).with_context(|| format!("failed to unmarshal weather: {}", text))?;
+            serde_json::from_str(&text).with_context(|| format!("failed to unmarshal weather: {text}"))?;
 
         let location = if let Some(country) = data.sys.country {
             format!("{}, {}", data.name, country)
@@ -62,7 +62,7 @@ impl Module {
         );
         let direction = {
             match data.wind.deg {
-                None => "".to_string(),
+                None => String::new(),
                 Some(d) => format!(" from the {}", text_for_angle(d)),
             }
         };

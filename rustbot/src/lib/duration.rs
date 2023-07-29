@@ -2,7 +2,11 @@ use std::time::Duration;
 
 use crate::prelude::*;
 
-use nom::{bytes::complete::*, combinator::*, sequence::*};
+use nom::{
+    bytes::complete::{tag, take_while},
+    combinator::{eof, map_res, opt},
+    sequence::terminated,
+};
 use nom::{error::Error as NomError, Finish, IResult};
 
 fn _parse_duration(i: &str) -> IResult<&str, Duration> {
@@ -21,12 +25,12 @@ fn _parse_duration(i: &str) -> IResult<&str, Duration> {
 }
 
 fn unumber(i: &str) -> IResult<&str, u64> {
-    map_res(take_while(|c: char| c.is_ascii_digit()), |s: &str| s.parse::<u64>())(i)
+    map_res(take_while(|c: char| c.is_ascii_digit()), str::parse)(i)
 }
 
 pub fn parse_duration(s: &str) -> Result<Duration> {
     _parse_duration(s)
         .finish()
         .map(|(_, d)| d)
-        .map_err(|NomError { input, .. }| UserError::new(format!("unexpected input at {}", input)).into())
+        .map_err(|NomError { input, .. }| UserError::new(format!("unexpected input at {input}")).into())
 }

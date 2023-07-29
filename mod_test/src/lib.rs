@@ -12,7 +12,7 @@ pub fn get_meta(meta: &mut dyn Meta) {
         "test",
         Command::new(|ctx, args| {
             ctx.say(&format!("beep boop {}", ctx.perms()?))?;
-            ctx.say(&format!("you passed: {}", args))?;
+            ctx.say(&format!("you passed: {args}"))?;
             ctx.reply(Message::Spans(spans!(
                 "simple ",
                 span!(Format::Bold; "bold"),
