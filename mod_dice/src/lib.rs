@@ -16,9 +16,9 @@ fn cmd_dice(ctx: &dyn Context, args: &str) -> Result<()> {
             "Usage: dice <roll>; try '1d6', '2d20H1', '2d6>7'".to_string(),
         ));
     }
-    let v = dice::parse(args).map_err(UserError::new)?;
-    let limit = dice::limits::Limiter::new(10000);
-    let result = dice::eval(&v, limit).map_err(UserError::new)?;
+    let v = dice::Command::new(args).map_err(UserError::new)?;
+    let mut limit = dice::limits::Limiter::new(10000);
+    let result = v.eval(&mut limit).map_err(UserError::new)?;
     ctx.reply(Message::Spans(result))
 }
 

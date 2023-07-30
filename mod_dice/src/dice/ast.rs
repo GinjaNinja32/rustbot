@@ -9,7 +9,6 @@ use rustbot::{span, spans};
 
 use super::limits::Limiter;
 use super::value::Value;
-use super::Evaluable;
 
 use nom::{
     branch::alt,
@@ -30,19 +29,13 @@ where
     delimited(multispace0, inner, multispace0)
 }
 
-pub fn command(i: &str) -> IResult<&str, Command> {
-    let (i, res) = alt((
-        tuple((
-            separated_list1(ws(tag(";")), tuple((terminated(anychar, tag(":")), expression))),
-            preceded(ws(tag(";")), many0(output_segment)),
-        ))
-        .map(|(bindings, output)| Command::Complex { bindings, output }),
-        expression.map(Command::Simple),
-    ))(i)?;
-    let (i, _) = eof(i)?;
-
-    Ok((i, res))
+trait Parse: Sized {
+    fn parse(i: &str) -> IResult<&str, Self>;
 }
+trait Evaluable: Parse {
+    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String>;
+}
+
 pub enum Command {
     Simple(Expression),
     Complex {
@@ -50,7 +43,25 @@ pub enum Command {
         output: Vec<OutputSegment>,
     },
 }
+impl Parse for Command {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, res) = alt((
+            tuple((
+                separated_list1(ws(tag(";")), tuple((terminated(anychar, tag(":")), Expression::parse))),
+                preceded(ws(tag(";")), many0(output_segment)),
+            ))
+            .map(|(bindings, output)| Self::Complex { bindings, output }),
+            Expression::parse.map(Self::Simple),
+        ))(i)?;
+        let (i, _) = eof(i)?;
+
+        Ok((i, res))
+    }
+}
 impl Command {
+    pub fn new(input: &str) -> Result<Self, String> {
+        Self::parse(input).map(|(_, c)| c).map_err(|e| format!("{e}"))
+    }
     pub fn eval(&self, limit: &mut Limiter) -> Result<Vec<Span>, String> {
         match self {
             Self::Simple(expr) => {
@@ -132,14 +143,16 @@ pub enum OutputSegment {
     Plural(String, String),
 }
 
-fn expression(i: &str) -> IResult<&str, Expression> {
-    let (i, repeat) = ws(repeat)(i)?;
-
-    Ok((i, Expression { repeat }))
-}
 #[derive(Debug)]
 pub struct Expression {
     pub repeat: Repeat, // ...
+}
+impl Parse for Expression {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, repeat) = ws(Repeat::parse)(i)?;
+
+        Ok((i, Expression { repeat }))
+    }
 }
 impl Evaluable for Expression {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -147,16 +160,18 @@ impl Evaluable for Expression {
     }
 }
 
-fn repeat(i: &str) -> IResult<&str, Repeat> {
-    alt((
-        tuple((number, ws(tag("#")), comparison)).map(|(r, _, term)| Repeat { repeat: Some(r), term }),
-        comparison.map(|term| Repeat { repeat: None, term }),
-    ))(i)
-}
 #[derive(Debug)]
 pub struct Repeat {
     pub repeat: Option<i64>, // ( integer "#" )?
     pub term: Comparison,    // ...
+}
+impl Parse for Repeat {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            tuple((number, ws(tag("#")), Comparison::parse)).map(|(r, _, term)| Self { repeat: Some(r), term }),
+            Comparison::parse.map(|term| Self { repeat: None, term }),
+        ))(i)
+    }
 }
 impl Evaluable for Repeat {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -178,16 +193,18 @@ impl Evaluable for Repeat {
     }
 }
 
-fn comparison(i: &str) -> IResult<&str, Comparison> {
-    let (i, left) = addsub(i)?;
-    let (i, right) = opt(tuple((ws(compare_op), addsub)))(i)?;
-
-    Ok((i, Comparison { left, right }))
-}
 #[derive(Debug)]
 pub struct Comparison {
     pub left: AddSub,                       // ...
     pub right: Option<(CompareOp, AddSub)>, // ( operator ... )?
+}
+impl Parse for Comparison {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, left) = AddSub::parse(i)?;
+        let (i, right) = opt(tuple((ws(CompareOp::parse), AddSub::parse)))(i)?;
+
+        Ok((i, Self { left, right }))
+    }
 }
 impl Evaluable for Comparison {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -204,16 +221,18 @@ impl Evaluable for Comparison {
     }
 }
 
-fn addsub(i: &str) -> IResult<&str, AddSub> {
-    let (i, left) = muldiv(i)?;
-    let (i, right) = many0(tuple((ws(addsub_op), muldiv)))(i)?;
-
-    Ok((i, AddSub { left, right }))
-}
 #[derive(Debug)]
 pub struct AddSub {
     pub left: MulDiv,                   // ...
     pub right: Vec<(AddSubOp, MulDiv)>, // ( operator ... )*
+}
+impl Parse for AddSub {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, left) = MulDiv::parse(i)?;
+        let (i, right) = many0(tuple((ws(AddSubOp::parse), MulDiv::parse)))(i)?;
+
+        Ok((i, Self { left, right }))
+    }
 }
 impl Evaluable for AddSub {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -230,16 +249,18 @@ impl Evaluable for AddSub {
     }
 }
 
-fn muldiv(i: &str) -> IResult<&str, MulDiv> {
-    let (i, left) = sum(i)?;
-    let (i, right) = many0(tuple((ws(muldiv_op), sum)))(i)?;
-
-    Ok((i, MulDiv { left, right }))
-}
 #[derive(Debug)]
 pub struct MulDiv {
     pub left: Sum,                   // ...
     pub right: Vec<(MulDivOp, Sum)>, // ( operator ... )*
+}
+impl Parse for MulDiv {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, left) = Sum::parse(i)?;
+        let (i, right) = many0(tuple((ws(MulDivOp::parse), Sum::parse)))(i)?;
+
+        Ok((i, Self { left, right }))
+    }
 }
 impl Evaluable for MulDiv {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -256,17 +277,19 @@ impl Evaluable for MulDiv {
     }
 }
 
-fn sum(i: &str) -> IResult<&str, Sum> {
-    let (i, is_sum) = opt(tag("s")).map(|o| o.is_some()).parse(i)?;
-    let (i, _) = multispace0(i)?;
-    let (i, term) = dicemod(i)?;
-
-    Ok((i, Sum { is_sum, term }))
-}
 #[derive(Debug)]
 pub struct Sum {
     pub is_sum: bool,  // ( "s" )?
     pub term: DiceMod, // ...
+}
+impl Parse for Sum {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, is_sum) = opt(tag("s")).map(|o| o.is_some()).parse(i)?;
+        let (i, _) = multispace0(i)?;
+        let (i, term) = DiceMod::parse(i)?;
+
+        Ok((i, Self { is_sum, term }))
+    }
 }
 impl Evaluable for Sum {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -279,16 +302,18 @@ impl Evaluable for Sum {
     }
 }
 
-fn dicemod(i: &str) -> IResult<&str, DiceMod> {
-    let (i, roll) = diceroll(i)?;
-    let (i, op) = opt(tuple((ws(dicemod_op), value)))(i)?;
-
-    Ok((i, DiceMod { roll, op }))
-}
 #[derive(Debug)]
 pub struct DiceMod {
     pub roll: DiceRoll,                // ...
     pub op: Option<(ModOp, AstValue)>, // ( operator ... )?
+}
+impl Parse for DiceMod {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, roll) = DiceRoll::parse(i)?;
+        let (i, op) = opt(tuple((ws(ModOp::parse), AstValue::parse)))(i)?;
+
+        Ok((i, Self { roll, op }))
+    }
 }
 impl Evaluable for DiceMod {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -312,21 +337,23 @@ impl Evaluable for DiceMod {
     }
 }
 
-fn explode(i: &str) -> IResult<&str, Explode> {
-    let (i, n) = preceded(tag("!"), opt(preceded(multispace0, number)))(i)?;
-
-    let res = if let Some(n) = n {
-        Explode::Target(n)
-    } else {
-        Explode::Default
-    };
-
-    Ok((i, res))
-}
 #[derive(Debug)]
 pub enum Explode {
     Default,
     Target(i64),
+}
+impl Parse for Explode {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, n) = preceded(tag("!"), opt(preceded(multispace0, number)))(i)?;
+
+        let res = if let Some(n) = n {
+            Self::Target(n)
+        } else {
+            Self::Default
+        };
+
+        Ok((i, res))
+    }
 }
 impl Display for Explode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
@@ -337,17 +364,6 @@ impl Display for Explode {
     }
 }
 
-fn diceroll(i: &str) -> IResult<&str, DiceRoll> {
-    alt((
-        tuple((
-            terminated(opt(value), ws(tag("d"))),
-            opt(value),
-            preceded(multispace0, opt(explode)),
-        ))
-        .map(|(count, sides, explode)| DiceRoll::Roll { count, sides, explode }),
-        value.map(DiceRoll::NoRoll),
-    ))(i)
-}
 #[derive(Debug)]
 pub enum DiceRoll {
     NoRoll(AstValue), // ...
@@ -356,6 +372,19 @@ pub enum DiceRoll {
         sides: Option<AstValue>,  // ( ... )?
         explode: Option<Explode>, // ( "!" ( integer )? )?
     },
+}
+impl Parse for DiceRoll {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            tuple((
+                terminated(opt(AstValue::parse), ws(tag("d"))),
+                opt(AstValue::parse),
+                preceded(multispace0, opt(Explode::parse)),
+            ))
+            .map(|(count, sides, explode)| Self::Roll { count, sides, explode }),
+            AstValue::parse.map(Self::NoRoll),
+        ))(i)
+    }
 }
 impl Evaluable for DiceRoll {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -511,22 +540,6 @@ impl DiceRoll {
     }
 }
 
-fn value(i: &str) -> IResult<&str, AstValue> {
-    alt((
-        preceded(tuple((tag("-"), multispace0)), number).map(|v| AstValue::Int(-v)),
-        number.map(AstValue::Int),
-        delimited(tag("("), ws(expression), tag(")")).map(|v| AstValue::Sub(Box::new(v))),
-        delimited(
-            terminated(tag("["), multispace0),
-            separated_list0(ws(tag(",")), expression),
-            preceded(multispace0, tag("]")),
-        )
-        .map(AstValue::Slice),
-        tag("F").map(|_| AstValue::Fate),
-        tag("%").map(|_| AstValue::Hundred),
-        preceded(tag("$"), anychar).map(AstValue::Binding),
-    ))(i)
-}
 #[derive(Debug)]
 pub enum AstValue {
     Int(i64),               // ...
@@ -535,6 +548,24 @@ pub enum AstValue {
     Fate,                   // "F"
     Hundred,                // "%"
     Binding(char),          // "$" ...
+}
+impl Parse for AstValue {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            preceded(tuple((tag("-"), multispace0)), number).map(|v| Self::Int(-v)),
+            number.map(Self::Int),
+            delimited(tag("("), ws(Expression::parse), tag(")")).map(|v| Self::Sub(Box::new(v))),
+            delimited(
+                terminated(tag("["), multispace0),
+                separated_list0(ws(tag(",")), Expression::parse),
+                preceded(multispace0, tag("]")),
+            )
+            .map(Self::Slice),
+            tag("F").map(|_| Self::Fate),
+            tag("%").map(|_| Self::Hundred),
+            preceded(tag("$"), anychar).map(Self::Binding),
+        ))(i)
+    }
 }
 impl Evaluable for AstValue {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
@@ -567,13 +598,15 @@ impl Evaluable for AstValue {
     }
 }
 
-fn addsub_op(i: &str) -> IResult<&str, AddSubOp> {
-    alt((tag("+").map(|_| AddSubOp::Add), tag("-").map(|_| AddSubOp::Sub)))(i)
-}
 #[derive(Debug)]
 pub enum AddSubOp {
     Add, // +
     Sub, // -
+}
+impl Parse for AddSubOp {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((tag("+").map(|_| Self::Add), tag("-").map(|_| Self::Sub)))(i)
+    }
 }
 impl AddSubOp {
     fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
@@ -600,13 +633,15 @@ impl Display for AddSubOp {
     }
 }
 
-fn muldiv_op(i: &str) -> IResult<&str, MulDivOp> {
-    alt((tag("*").map(|_| MulDivOp::Mul), tag("/").map(|_| MulDivOp::Div)))(i)
-}
 #[derive(Debug)]
 pub enum MulDivOp {
     Mul, // *
     Div, // /
+}
+impl Parse for MulDivOp {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((tag("*").map(|_| Self::Mul), tag("/").map(|_| Self::Div)))(i)
+    }
 }
 impl MulDivOp {
     fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
@@ -628,25 +663,27 @@ impl Display for MulDivOp {
     }
 }
 
-fn compare_op(i: &str) -> IResult<&str, CompareOp> {
-    let (i, each_left) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
-    let (i, op) = compare_base_op(i)?;
-    let (i, each_right) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
-
-    Ok((
-        i,
-        CompareOp {
-            each_left,
-            op,
-            each_right,
-        },
-    ))
-}
 #[derive(Debug)]
 pub struct CompareOp {
     each_left: bool,
     op: CompareBaseOp,
     each_right: bool,
+}
+impl Parse for CompareOp {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        let (i, each_left) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
+        let (i, op) = CompareBaseOp::parse(i)?;
+        let (i, each_right) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
+
+        Ok((
+            i,
+            Self {
+                each_left,
+                op,
+                each_right,
+            },
+        ))
+    }
 }
 impl CompareOp {
     fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
@@ -690,16 +727,6 @@ impl Display for CompareOp {
     }
 }
 
-fn compare_base_op(i: &str) -> IResult<&str, CompareBaseOp> {
-    alt((
-        alt((tag("<="), tag("=<"))).map(|_| CompareBaseOp::LessEq),
-        tag("<").map(|_| CompareBaseOp::Less),
-        alt((tag(">="), tag("=>"))).map(|_| CompareBaseOp::GreaterEq),
-        tag(">").map(|_| CompareBaseOp::Greater),
-        alt((tag("=="), tag("="))).map(|_| CompareBaseOp::Equal),
-        alt((tag("!="), tag("<>"))).map(|_| CompareBaseOp::Unequal),
-    ))(i)
-}
 #[derive(Debug)]
 pub enum CompareBaseOp {
     Less,      // <
@@ -708,6 +735,18 @@ pub enum CompareBaseOp {
     GreaterEq, // >=, =>
     Equal,     // ==, =
     Unequal,   // !=, <>
+}
+impl Parse for CompareBaseOp {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            alt((tag("<="), tag("=<"))).map(|_| Self::LessEq),
+            tag("<").map(|_| Self::Less),
+            alt((tag(">="), tag("=>"))).map(|_| Self::GreaterEq),
+            tag(">").map(|_| Self::Greater),
+            alt((tag("=="), tag("="))).map(|_| Self::Equal),
+            alt((tag("!="), tag("<>"))).map(|_| Self::Unequal),
+        ))(i)
+    }
 }
 impl CompareBaseOp {
     fn compare(&self, l: i64, r: i64) -> bool {
@@ -734,20 +773,22 @@ impl Display for CompareBaseOp {
     }
 }
 
-fn dicemod_op(i: &str) -> IResult<&str, ModOp> {
-    alt((
-        tag("l").map(|_| ModOp::DropLowest),
-        tag("h").map(|_| ModOp::DropHighest),
-        tag("L").map(|_| ModOp::KeepLowest),
-        tag("H").map(|_| ModOp::KeepHighest),
-    ))(i)
-}
 #[derive(Debug)]
 pub enum ModOp {
     DropLowest,  // l
     DropHighest, // h
     KeepLowest,  // L
     KeepHighest, // H
+}
+impl Parse for ModOp {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            tag("l").map(|_| Self::DropLowest),
+            tag("h").map(|_| Self::DropHighest),
+            tag("L").map(|_| Self::KeepLowest),
+            tag("H").map(|_| Self::KeepHighest),
+        ))(i)
+    }
 }
 
 fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'static>> {

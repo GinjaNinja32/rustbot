@@ -1,9 +1,8 @@
-use std::collections::BTreeMap;
-
-use rustbot::prelude::Span;
-
 mod ast;
 mod value;
+
+pub use ast::Command;
+
 pub mod limits {
     pub struct Limiter {
         entropy: u64,
@@ -32,20 +31,4 @@ pub mod limits {
             }
         }
     }
-}
-
-pub trait Evaluable {
-    fn eval(
-        &self,
-        limit: &mut limits::Limiter,
-        values: &BTreeMap<char, value::Value>,
-    ) -> Result<(Vec<Span>, value::Value), String>;
-}
-
-pub fn parse(input: &str) -> Result<ast::Command, String> {
-    ast::command(input).map(|(_, c)| c).map_err(|e| format!("{e:?}"))
-}
-
-pub fn eval(cmd: &ast::Command, mut limit: limits::Limiter) -> Result<Vec<Span>, String> {
-    cmd.eval(&mut limit)
 }
