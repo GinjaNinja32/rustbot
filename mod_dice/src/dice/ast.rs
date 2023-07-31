@@ -29,11 +29,14 @@ where
     delimited(multispace0, inner, multispace0)
 }
 
-trait Parse: Sized {
+pub trait Parse: Sized {
     fn parse(i: &str) -> IResult<&str, Self>;
 }
-trait Evaluable: Parse {
+pub trait Evaluable: Parse {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String>;
+}
+pub trait Operator: Parse {
+    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String>;
 }
 
 pub enum Command {
@@ -181,7 +184,7 @@ impl Evaluable for Repeat {
                 let (strs, vals) = (0..n)
                     .map(|_| {
                         let (s, v) = self.term.eval(limit, values)?;
-                        Ok((s, v.to_int()?))
+                        Ok((s, v.to_int()))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
                     .drain(..)
@@ -213,7 +216,7 @@ impl Evaluable for Comparison {
             None => Ok(l),
             Some((op, term)) => {
                 let r = term.eval(limit, values)?;
-                let v = op.apply(l.1, r.1)?;
+                let v = op.apply(&l.1, &r.1)?;
 
                 Ok((spans!(l.0, format!("{}", op), r.0), v))
             }
@@ -222,19 +225,19 @@ impl Evaluable for Comparison {
 }
 
 #[derive(Debug)]
-pub struct AddSub {
-    pub left: MulDiv,                   // ...
-    pub right: Vec<(AddSubOp, MulDiv)>, // ( operator ... )*
+pub struct BinaryOpClass<Sub: Evaluable, Op: Operator + Display> {
+    pub left: Sub,
+    pub right: Vec<(Op, Sub)>,
 }
-impl Parse for AddSub {
+impl<Sub: Evaluable, Op: Operator + Display + 'static> Parse for BinaryOpClass<Sub, Op> {
     fn parse(i: &str) -> IResult<&str, Self> {
-        let (i, left) = MulDiv::parse(i)?;
-        let (i, right) = many0(tuple((ws(AddSubOp::parse), MulDiv::parse)))(i)?;
+        let (i, left) = Sub::parse(i)?;
+        let (i, right) = many0(tuple((ws(Op::parse), Sub::parse)))(i)?;
 
         Ok((i, Self { left, right }))
     }
 }
-impl Evaluable for AddSub {
+impl<Sub: Evaluable, Op: Operator + Display + 'static> Evaluable for BinaryOpClass<Sub, Op> {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         let (s, mut l) = self.left.eval(limit, values)?;
         let mut ss = s;
@@ -243,39 +246,15 @@ impl Evaluable for AddSub {
 
             ss.push(format!("{}", elem.0).into());
             ss.append(&mut rs);
-            l = elem.0.apply(l, r)?;
+            l = elem.0.apply(&l, &r)?;
         }
         Ok((ss, l))
     }
 }
 
-#[derive(Debug)]
-pub struct MulDiv {
-    pub left: Sum,                   // ...
-    pub right: Vec<(MulDivOp, Sum)>, // ( operator ... )*
-}
-impl Parse for MulDiv {
-    fn parse(i: &str) -> IResult<&str, Self> {
-        let (i, left) = Sum::parse(i)?;
-        let (i, right) = many0(tuple((ws(MulDivOp::parse), Sum::parse)))(i)?;
+pub type AddSub = BinaryOpClass<MulDiv, AddSubOp>;
 
-        Ok((i, Self { left, right }))
-    }
-}
-impl Evaluable for MulDiv {
-    fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
-        let (s, mut l) = self.left.eval(limit, values)?;
-        let mut ss = s;
-        for elem in &self.right {
-            let (mut rs, r) = elem.1.eval(limit, values)?;
-
-            ss.push(format!("{}", elem.0).into());
-            ss.append(&mut rs);
-            l = elem.0.apply(l, r)?;
-        }
-        Ok((ss, l))
-    }
-}
+pub type MulDiv = BinaryOpClass<Sum, MulDivOp>;
 
 #[derive(Debug)]
 pub struct Sum {
@@ -295,7 +274,7 @@ impl Evaluable for Sum {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         let (s, v) = self.term.eval(limit, values)?;
         if self.is_sum {
-            Ok((spans!("s", s), Value::Int(v.to_int()?)))
+            Ok((spans!("s", s), Value::Int(v.to_int())))
         } else {
             Ok((s, v))
         }
@@ -456,7 +435,7 @@ impl DiceRoll {
                 let (cs, c) = match cv {
                     Some(v) => {
                         let (vs, vv) = v.eval(limit, values)?;
-                        let count = vv.to_int()?;
+                        let count = vv.to_int();
                         (vs, count)
                     }
                     None => (vec![], 1),
@@ -580,7 +559,7 @@ impl Evaluable for AstValue {
                     .iter()
                     .map(|e| {
                         let (s, v) = e.eval(limit, values)?;
-                        Ok((s, v.to_int()?))
+                        Ok((s, v.to_int()))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
                     .drain(..)
@@ -599,80 +578,84 @@ impl Evaluable for AstValue {
 }
 
 #[derive(Debug)]
-pub enum AddSubOp {
+pub enum AddSubBaseOp {
     Add, // +
     Sub, // -
 }
-impl Parse for AddSubOp {
+impl Parse for AddSubBaseOp {
     fn parse(i: &str) -> IResult<&str, Self> {
         alt((tag("+").map(|_| Self::Add), tag("-").map(|_| Self::Sub)))(i)
     }
 }
-impl AddSubOp {
-    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
-        if let (Value::IntSlice(l), Value::IntSlice(r)) = (&left, &right) {
+impl Operator for AddSubBaseOp {
+    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
+        if let (Value::IntSlice(l), Value::IntSlice(r)) = (left, right) {
             let mut l = l.clone();
             l.extend_from_slice(r);
             return Ok(Value::IntSlice(l));
         }
-        let l = left.to_int()?;
-        let r = right.to_int()?;
+        let l = left.to_int();
+        let r = right.to_int();
         let result = match self {
-            AddSubOp::Add => l.wrapping_add(r),
-            AddSubOp::Sub => l.wrapping_sub(r),
+            Self::Add => l.wrapping_add(r),
+            Self::Sub => l.wrapping_sub(r),
         };
         Ok(Value::Int(result))
     }
 }
-impl Display for AddSubOp {
+impl Display for AddSubBaseOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AddSubOp::Add => write!(f, "+"),
-            AddSubOp::Sub => write!(f, "-"),
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
         }
     }
 }
 
+type AddSubOp = MaybeElementwise<AddSubBaseOp>;
+
 #[derive(Debug)]
-pub enum MulDivOp {
+pub enum MulDivBaseOp {
     Mul, // *
     Div, // /
 }
-impl Parse for MulDivOp {
+impl Parse for MulDivBaseOp {
     fn parse(i: &str) -> IResult<&str, Self> {
         alt((tag("*").map(|_| Self::Mul), tag("/").map(|_| Self::Div)))(i)
     }
 }
-impl MulDivOp {
-    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
-        let l = left.to_int()?;
-        let r = right.to_int()?;
+impl Operator for MulDivBaseOp {
+    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
+        let l = left.to_int();
+        let r = right.to_int();
         let result = match self {
-            MulDivOp::Mul => l.wrapping_mul(r),
-            MulDivOp::Div => l.wrapping_div(r),
+            Self::Mul => l.wrapping_mul(r),
+            Self::Div => l.wrapping_div(r),
         };
         Ok(Value::Int(result))
     }
 }
-impl Display for MulDivOp {
+impl Display for MulDivBaseOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            MulDivOp::Mul => write!(f, "*"),
-            MulDivOp::Div => write!(f, "/"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
         }
     }
 }
 
+type MulDivOp = MaybeElementwise<MulDivBaseOp>;
+
 #[derive(Debug)]
-pub struct CompareOp {
+pub struct MaybeElementwise<Op: Operator> {
     each_left: bool,
-    op: CompareBaseOp,
+    op: Op,
     each_right: bool,
 }
-impl Parse for CompareOp {
+impl<Op: Operator> Parse for MaybeElementwise<Op> {
     fn parse(i: &str) -> IResult<&str, Self> {
         let (i, each_left) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
-        let (i, op) = CompareBaseOp::parse(i)?;
+        let (i, op) = Op::parse(i)?;
         let (i, each_right) = opt(tag("e")).map(|o| o.is_some()).parse(i)?;
 
         Ok((
@@ -685,36 +668,36 @@ impl Parse for CompareOp {
         ))
     }
 }
-impl CompareOp {
-    fn apply(&self, left: Value, right: Value) -> Result<Value, String> {
-        self._apply(&left, &right)
-            .map_err(|e| format!("cannot compare {left} {self} {right}: {e}"))
-    }
-    fn _apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
-        let result = match (self.each_left, self.each_right) {
-            (false, false) => Value::Bool(self.op.compare(left.to_int()?, right.to_int()?)),
-            (false, true) => {
-                let l = left.to_int()?;
-                Value::BoolSlice(right.to_int_slice()?.iter().map(|r| self.op.compare(l, *r)).collect())
-            }
-            (true, false) => {
-                let r = right.to_int()?;
-                Value::BoolSlice(left.to_int_slice()?.iter().map(|l| self.op.compare(*l, r)).collect())
-            }
+impl<Op: Operator + Display> Operator for MaybeElementwise<Op> {
+    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
+        (|| match (self.each_left, self.each_right) {
+            (false, false) => self.op.apply(left, right),
+            (false, true) => right
+                .to_int_slice()?
+                .into_iter()
+                .map(|r| self.op.apply(left, &Value::Int(r)))
+                .collect(),
+            (true, false) => left
+                .to_int_slice()?
+                .into_iter()
+                .map(|l| self.op.apply(&Value::Int(l), right))
+                .collect(),
             (true, true) => {
                 let lv = left.to_int_slice()?;
                 let rv = right.to_int_slice()?;
                 if lv.len() != rv.len() {
                     return Err("mismatched lengths".to_string());
                 }
-                Value::BoolSlice((0..lv.len()).map(|i| self.op.compare(lv[i], rv[i])).collect())
+                lv.into_iter()
+                    .zip(rv)
+                    .map(|(l, r)| self.op.apply(&Value::Int(l), &Value::Int(r)))
+                    .collect()
             }
-        };
-
-        Ok(result)
+        })()
+        .map_err(|e| format!("cannot compare {left} {self} {right}: {e}"))
     }
 }
-impl Display for CompareOp {
+impl<Op: Operator + Display> Display for MaybeElementwise<Op> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.each_left {
             write!(f, "e")?;
@@ -726,6 +709,8 @@ impl Display for CompareOp {
         Ok(())
     }
 }
+
+pub type CompareOp = MaybeElementwise<CompareBaseOp>;
 
 #[derive(Debug)]
 pub enum CompareBaseOp {
@@ -748,16 +733,18 @@ impl Parse for CompareBaseOp {
         ))(i)
     }
 }
-impl CompareBaseOp {
-    fn compare(&self, l: i64, r: i64) -> bool {
-        match self {
+impl Operator for CompareBaseOp {
+    fn apply(&self, l: &Value, r: &Value) -> Result<Value, String> {
+        let l = l.to_int();
+        let r = r.to_int();
+        Ok(Value::Bool(match self {
             Self::Less => l < r,
             Self::LessEq => l <= r,
             Self::Greater => l > r,
             Self::GreaterEq => l >= r,
             Self::Equal => l == r,
             Self::Unequal => l != r,
-        }
+        }))
     }
 }
 impl Display for CompareBaseOp {
@@ -804,7 +791,7 @@ impl ModOp {
     fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
         let mut l = left.to_int_slice()?;
         l.sort_unstable();
-        let r = right.to_int()? as usize;
+        let r = right.to_int() as usize;
         if r > l.len() {
             return Err(format!(
                 "cannot evaluate a keep/drop {} operation on {} dice",

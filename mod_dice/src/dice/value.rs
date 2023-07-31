@@ -33,14 +33,32 @@ impl Display for Value {
     }
 }
 
+impl std::iter::FromIterator<Value> for Value {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        let mut iter = iter.into_iter().peekable();
+
+        match iter.peek() {
+            None => Value::IntSlice(vec![]),
+            Some(Value::Bool(_)) => Value::BoolSlice(iter.map(|v| v.to_bool()).collect()),
+            _ => Value::IntSlice(iter.map(|v| v.to_int()).collect()),
+        }
+    }
+}
+
 impl Value {
-    pub fn to_int(&self) -> Result<i64, String> {
+    fn to_bool(&self) -> bool {
+        !matches!(self, Self::Int(0) | Self::Bool(false))
+    }
+    pub fn to_int(&self) -> i64 {
         match self {
-            Self::Int(i) => Ok(*i),
-            Self::IntSlice(s) => Ok(s.iter().sum()),
-            Self::Bool(true) => Ok(1),
-            Self::Bool(false) => Ok(0),
-            Self::BoolSlice(s) => Ok(s.iter().filter(|&v| *v).count() as i64),
+            Self::Int(i) => *i,
+            Self::IntSlice(s) => s.iter().sum(),
+            Self::Bool(true) => 1,
+            Self::Bool(false) => 0,
+            Self::BoolSlice(s) => s.iter().filter(|&v| *v).count() as i64,
         }
     }
     pub fn to_int_slice(&self) -> Result<Vec<i64>, String> {
