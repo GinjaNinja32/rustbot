@@ -299,7 +299,7 @@ impl Evaluable for DiceMod {
         match &self.op {
             None => self.roll.eval(limit, values),
             Some((op, r)) => match self.roll {
-                DiceRoll::NoRoll(_) | DiceRoll::Index(_, _) => {
+                DiceRoll::NoRoll(_) | DiceRoll::Index { .. } => {
                     let l = self.roll.eval(limit, values)?;
                     let (rs, rv) = r.eval(limit, values)?;
                     let (_, v) = op.apply(l.1, rv)?;
@@ -345,8 +345,12 @@ impl Display for Explode {
 
 #[derive(Debug)]
 pub enum DiceRoll {
-    NoRoll(AstValue),          // ...
-    Index(AstValue, AstValue), // ... @ ...
+    NoRoll(AstValue), // ...
+    Index {
+        val: AstValue,   // ...
+        each: bool,      // @ e?
+        index: AstValue, // ...
+    },
     Roll {
         count: Option<AstValue>,  // ( ... )? "d"
         sides: Option<AstValue>,  // ( ... )?
@@ -362,7 +366,16 @@ impl Parse for DiceRoll {
                 preceded(multispace0, opt(Explode::parse)),
             ))
             .map(|(count, sides, explode)| Self::Roll { count, sides, explode }),
-            tuple((terminated(AstValue::parse, ws(tag("@"))), AstValue::parse)).map(|(val, idx)| Self::Index(val, idx)),
+            tuple((
+                terminated(AstValue::parse, multispace0),
+                preceded(tag("@"), opt(tag("e"))),
+                preceded(multispace0, AstValue::parse),
+            ))
+            .map(|(val, each, index)| Self::Index {
+                val,
+                each: each.is_some(),
+                index,
+            }),
             AstValue::parse.map(Self::NoRoll),
         ))(i)
     }
@@ -371,7 +384,7 @@ impl Evaluable for DiceRoll {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         let (s, r) = self._eval(limit, values)?;
         match self {
-            DiceRoll::NoRoll(_) | DiceRoll::Index(_, _) => Ok((s, r)),
+            DiceRoll::NoRoll(_) | DiceRoll::Index { .. } => Ok((s, r)),
             DiceRoll::Roll { .. } => Ok((spans!(s, ":", r.to_string()), r)),
         }
     }
@@ -429,11 +442,20 @@ impl DiceRoll {
     fn _eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match self {
             DiceRoll::NoRoll(v) => v.eval(limit, values),
-            DiceRoll::Index(val, idx) => {
+            DiceRoll::Index { val, each, index } => {
                 let (sv, v) = val.eval(limit, values)?;
-                let (si, i) = idx.eval(limit, values)?;
+                let (si, i) = index.eval(limit, values)?;
 
-                v.index_slice(i.to_int()).map(|val| (spans!(sv, "@", si), val))
+                if *each {
+                    let val = i
+                        .to_int_slice()?
+                        .into_iter()
+                        .map(|idx| v.index_slice(idx))
+                        .collect::<Result<Value, _>>()?;
+                    Ok((spans!(sv, "@e", si), val))
+                } else {
+                    v.index_slice(i.to_int()).map(|val| (spans!(sv, "@", si), val))
+                }
             }
             DiceRoll::Roll {
                 count: cv,
