@@ -299,7 +299,7 @@ impl Evaluable for DiceMod {
         match &self.op {
             None => self.roll.eval(limit, values),
             Some((op, r)) => match self.roll {
-                DiceRoll::NoRoll(_) => {
+                DiceRoll::NoRoll(_) | DiceRoll::Index(_, _) => {
                     let l = self.roll.eval(limit, values)?;
                     let (rs, rv) = r.eval(limit, values)?;
                     let (_, v) = op.apply(l.1, rv)?;
@@ -345,7 +345,8 @@ impl Display for Explode {
 
 #[derive(Debug)]
 pub enum DiceRoll {
-    NoRoll(AstValue), // ...
+    NoRoll(AstValue),          // ...
+    Index(AstValue, AstValue), // ... @ ...
     Roll {
         count: Option<AstValue>,  // ( ... )? "d"
         sides: Option<AstValue>,  // ( ... )?
@@ -361,6 +362,7 @@ impl Parse for DiceRoll {
                 preceded(multispace0, opt(Explode::parse)),
             ))
             .map(|(count, sides, explode)| Self::Roll { count, sides, explode }),
+            tuple((terminated(AstValue::parse, ws(tag("@"))), AstValue::parse)).map(|(val, idx)| Self::Index(val, idx)),
             AstValue::parse.map(Self::NoRoll),
         ))(i)
     }
@@ -369,7 +371,7 @@ impl Evaluable for DiceRoll {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         let (s, r) = self._eval(limit, values)?;
         match self {
-            DiceRoll::NoRoll(_) => Ok((s, r)),
+            DiceRoll::NoRoll(_) | DiceRoll::Index(_, _) => Ok((s, r)),
             DiceRoll::Roll { .. } => Ok((spans!(s, ":", r.to_string()), r)),
         }
     }
@@ -427,6 +429,12 @@ impl DiceRoll {
     fn _eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
         match self {
             DiceRoll::NoRoll(v) => v.eval(limit, values),
+            DiceRoll::Index(val, idx) => {
+                let (sv, v) = val.eval(limit, values)?;
+                let (si, i) = idx.eval(limit, values)?;
+
+                v.index_slice(i.to_int()).map(|val| (spans!(sv, "@", si), val))
+            }
             DiceRoll::Roll {
                 count: cv,
                 sides: sv,

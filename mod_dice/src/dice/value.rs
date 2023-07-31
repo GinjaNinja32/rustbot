@@ -69,4 +69,24 @@ impl Value {
             Self::BoolSlice(s) => Ok(s.iter().map(|&v| i64::from(v)).collect()),
         }
     }
+    pub fn index_slice(&self, idx: i64) -> Result<Self, String> {
+        if idx < 0 {
+            return Err(format!("cannot index with {}", idx));
+        }
+        let idx = idx as usize;
+        match self {
+            Self::Int(i) => Err(format!("cannot convert {i} to slice")),
+            Self::IntSlice(s) => s
+                .get(idx)
+                .copied()
+                .ok_or_else(|| format!("cannot index slice of len {} with {}", s.len(), idx))
+                .map(Value::Int),
+            Self::Bool(b) => Err(format!("cannot convert {b} to slice")),
+            Self::BoolSlice(s) => s
+                .get(idx)
+                .copied()
+                .ok_or_else(|| format!("cannot index slice of len {} with {}", s.len(), idx))
+                .map(Value::Bool),
+        }
+    }
 }
