@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 
-use rustbot::prelude::{span_join, Color, Format, Span};
+use rustbot::prelude::{span_join, Color, Format, FormatColor, Span};
 use rustbot::{span, spans};
 
 use super::limits::Limiter;
@@ -808,10 +808,10 @@ impl Parse for ModOp {
     }
 }
 
-fn format_arrays(ac: Color, aa: &[i64], bc: Color, ba: &[i64]) -> Vec<Span<'static>> {
+fn format_arrays(ac: FormatColor, aa: &[i64], bc: FormatColor, ba: &[i64]) -> Vec<Span<'static>> {
     let vec = Iterator::chain(
-        aa.iter().map(|v| span!(ac + Format::Bold; "{}", v)),
-        ba.iter().map(|v| span!(bc + Format::Bold; "{}", v)),
+        aa.iter().map(|v| span!(ac; "{}", v)),
+        ba.iter().map(|v| span!(bc; "{}", v)),
     )
     .collect::<Vec<_>>();
     spans!("[", span_join(vec, ", "), "]")
@@ -829,16 +829,18 @@ impl ModOp {
                 l.len()
             ));
         }
+        let keep = Color::Yellow + Format::Bold;
+        let drop = Color::Red + Format::Italic;
         let (s, result) = match self {
-            ModOp::DropLowest => (format_arrays(Color::Red, &l[..r], Color::Yellow, &l[r..]), &l[r..]),
+            ModOp::DropLowest => (format_arrays(drop, &l[..r], keep, &l[r..]), &l[r..]),
             ModOp::DropHighest => {
                 let i = l.len() - r;
-                (format_arrays(Color::Yellow, &l[..i], Color::Red, &l[i..]), &l[..i])
+                (format_arrays(keep, &l[..i], drop, &l[i..]), &l[..i])
             }
-            ModOp::KeepLowest => (format_arrays(Color::Yellow, &l[..r], Color::Red, &l[r..]), &l[..r]),
+            ModOp::KeepLowest => (format_arrays(keep, &l[..r], drop, &l[r..]), &l[..r]),
             ModOp::KeepHighest => {
                 let i = l.len() - r;
-                (format_arrays(Color::Red, &l[..i], Color::Yellow, &l[i..]), &l[i..])
+                (format_arrays(drop, &l[..i], keep, &l[i..]), &l[i..])
             }
         };
         Ok((s, Value::IntSlice(result.to_vec())))
