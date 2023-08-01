@@ -98,6 +98,30 @@ impl Command {
                                 return Err(format!("binding ${ch} not defined"));
                             }
                         },
+                        OutputSegment::Select(ch, strs) => match vals.get(ch) {
+                            None => {
+                                return Err(format!("binding ${ch} not defined"));
+                            }
+                            Some(v) => {
+                                let idx = v.to_int();
+                                if idx < 0 {
+                                    return Err(format!(
+                                        "index {idx} out of range for format with {} options",
+                                        strs.len()
+                                    ));
+                                }
+
+                                match strs.get(idx as usize) {
+                                    None => {
+                                        return Err(format!(
+                                            "index {idx} out of range for format with {} options",
+                                            strs.len()
+                                        ))
+                                    }
+                                    Some(s) => spans.push(span! {s}),
+                                }
+                            }
+                        },
                         OutputSegment::Plural(sg, pl) => {
                             if last_plural {
                                 spans.push(span! {pl});
@@ -123,7 +147,7 @@ fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
                 delimited(
                     tag("["),
                     separated_pair(
-                        take_while(|c| c != '|').map(String::from),
+                        take_while(|c| c != '|' && c != ']').map(String::from),
                         tag("|"),
                         take_while(|c| c != ']').map(String::from),
                     ),
@@ -134,6 +158,15 @@ fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
                     .map(|pl| OutputSegment::Plural(String::new(), pl)),
             )),
         ),
+        tuple((
+            preceded(tuple((tag("%"), tag("$"))), anychar),
+            delimited(
+                tag("["),
+                separated_list1(tag("|"), take_while(|c| c != '|' && c != ']').map(String::from)),
+                tag("]"),
+            ),
+        ))
+        .map(|(ch, lst)| OutputSegment::Select(ch, lst)),
         preceded(tag("$"), anychar).map(OutputSegment::Value),
         take_while1(|c| c != '%' && c != '$')
             .map(String::from)
@@ -144,6 +177,7 @@ pub enum OutputSegment {
     Text(String),
     Value(char),
     Plural(String, String),
+    Select(char, Vec<String>),
 }
 
 #[derive(Debug)]
