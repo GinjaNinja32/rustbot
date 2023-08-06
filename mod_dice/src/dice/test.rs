@@ -1,7 +1,7 @@
 use rand::{rngs::StdRng, SeedableRng};
 use std::collections::BTreeMap;
 
-use rustbot::prelude::spans_to_raw_string;
+use rustbot::prelude::{spans, spans_to_raw_string};
 
 use super::ast::*;
 use super::limits::Limiter;
@@ -59,7 +59,7 @@ macro_rules! test_evaluation {
                 #[allow(unused_mut)]
                 let mut values = BTreeMap::new();
                 $($(
-                    values.insert($name, $val);
+                    values.insert($name, (spans!{stringify!($name)}, $val));
                 )*)?
 
 
@@ -132,6 +132,7 @@ fn test_command() {
     test_command_eval!(
         "2d6" => "[3, 6]: 2d6:[3, 6]",
         "6#s4d6" => "[11, 17, 10, 17, 10, 12]: s4d6:[3, 6, 1, 1], s4d6:[5, 3, 5, 4], s4d6:[2, 2, 3, 3], s4d6:[3, 6, 6, 2], s4d6:[5, 1, 1, 3], s4d6:[4, 2, 3, 3]",
+        "R: 2d6; $R" => "[3, 6]: 2d6:[3, 6]",
         "R: 2d6;; $R" => "[3, 6]",
 
         // '!space 1' through '!space 6'

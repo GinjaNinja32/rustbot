@@ -32,14 +32,14 @@ where
 pub struct EvalContext<'a, R: Rng + ?Sized> {
     pub limit: &'a mut Limiter,
     pub rng: &'a mut R,
-    pub values: BTreeMap<char, Value>,
+    pub values: BTreeMap<char, (Vec<Span<'static>>, Value)>,
 }
 
 pub trait Parse: Sized {
     fn parse(i: &str) -> IResult<&str, Self>;
 }
 pub trait Evaluable: Parse {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String>;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String>;
 }
 pub trait Operator: Parse {
     fn apply(&self, left: &Value, right: &Value) -> Result<Value, String>;
@@ -96,8 +96,8 @@ impl Command {
         };
 
         for (ch, expr) in &self.bindings.0 {
-            let (_, v) = expr.eval(&mut ctx)?;
-            ctx.values.insert(*ch, v);
+            let (s, v) = expr.eval(&mut ctx)?;
+            ctx.values.insert(*ch, (s, v));
         }
 
         match &self.output {
@@ -114,12 +114,12 @@ impl Command {
                         OutputSegment::Text(s) => spans.push(span! {s}),
                         OutputSegment::Value(ch) => match ctx.values.get(ch) {
                             Some(v) => {
-                                if let Value::Int(1) = v {
+                                if let Value::Int(1) = v.1 {
                                     last_plural = false
                                 } else {
                                     last_plural = true
                                 }
-                                spans.push(span! {format!("{}", v)});
+                                spans.push(span! {format!("{}", v.1)});
                             }
                             None => {
                                 return Err(format!("binding ${ch} not defined"));
@@ -130,7 +130,7 @@ impl Command {
                                 return Err(format!("binding ${ch} not defined"));
                             }
                             Some(v) => {
-                                let idx = v.to_int();
+                                let idx = v.1.to_int();
                                 if idx < 0 {
                                     return Err(format!(
                                         "index {idx} out of range for format with {} options",
@@ -220,7 +220,7 @@ impl Parse for Expression {
     }
 }
 impl Evaluable for Expression {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         self.0.eval(ctx)
     }
 }
@@ -251,7 +251,7 @@ impl Parse for Repeat {
     }
 }
 impl Evaluable for Repeat {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         match self.repeat {
             None => self.term.eval(ctx),
             Some(n) => {
@@ -296,7 +296,7 @@ impl Parse for Comparison {
     }
 }
 impl Evaluable for Comparison {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         let l = self.left.eval(ctx)?;
         match &self.right {
             None => Ok(l),
@@ -336,7 +336,7 @@ impl<Sub: Evaluable, Op: Operator + Display + 'static> Parse for BinaryOpClass<S
     }
 }
 impl<Sub: Evaluable, Op: Operator + Display + 'static> Evaluable for BinaryOpClass<Sub, Op> {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         let (s, mut l) = self.left.eval(ctx)?;
         let mut ss = s;
         for elem in &self.right {
@@ -381,7 +381,7 @@ impl Parse for Sum {
     }
 }
 impl Evaluable for Sum {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         let (s, v) = self.term.eval(ctx)?;
         if self.is_sum {
             Ok((spans!("s", s), Value::Int(v.to_int())))
@@ -417,7 +417,7 @@ impl Parse for DiceMod {
     }
 }
 impl Evaluable for DiceMod {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         match &self.op {
             None => self.roll.eval(ctx),
             Some((op, r)) => match self.roll {
@@ -522,7 +522,7 @@ impl Parse for DiceRoll {
     }
 }
 impl Evaluable for DiceRoll {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         let (s, r) = self._eval(ctx)?;
         match self {
             DiceRoll::NoRoll(_) | DiceRoll::Index { .. } => Ok((s, r)),
@@ -580,7 +580,7 @@ impl DiceOptions {
 }
 
 impl DiceRoll {
-    fn _eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn _eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         match self {
             DiceRoll::NoRoll(v) => v.eval(ctx),
             DiceRoll::Index { val, each, index } => {
@@ -724,7 +724,7 @@ impl Parse for AstValue {
     }
 }
 impl Evaluable for AstValue {
-    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span<'static>>, Value), String> {
         match self {
             AstValue::Int(i) => Ok((spans!(format!("{}", i)), Value::Int(*i))),
             AstValue::Sub(expr) => {
@@ -747,7 +747,7 @@ impl Evaluable for AstValue {
             AstValue::Fate => Ok((spans!("F"), Value::IntSlice(vec![-1, 0, 1]))),
             AstValue::Hundred => Ok((spans!("%"), Value::Int(100))),
             AstValue::Binding(ch) => match ctx.values.get(ch) {
-                Some(v) => Ok((spans!("$", format!("{}", ch)), v.clone())),
+                Some(v) => Ok((v.0.clone(), v.1.clone())),
                 None => Err(format!("binding ${ch} not defined")),
             },
         }
@@ -913,7 +913,7 @@ fn format_arrays(ac: FormatColor, aa: &[i64], bc: FormatColor, ba: &[i64]) -> Ve
 }
 
 impl ModOp {
-    fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span>, Value), String> {
+    fn apply(&self, left: Value, right: Value) -> Result<(Vec<Span<'static>>, Value), String> {
         let mut l = left.to_int_slice()?;
         l.sort_unstable();
         let r = right.to_int() as usize;
