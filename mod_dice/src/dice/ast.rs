@@ -14,7 +14,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{anychar, multispace0},
-    combinator::{eof, map_res, opt},
+    combinator::{eof, map_res, opt, value},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
 };
@@ -641,73 +641,60 @@ impl Evaluable for AstValue {
     }
 }
 
-#[derive(Debug)]
-pub enum AddSubBaseOp {
-    Add, // +
-    Sub, // -
-}
-impl Parse for AddSubBaseOp {
-    fn parse(i: &str) -> IResult<&str, Self> {
-        alt((tag("+").map(|_| Self::Add), tag("-").map(|_| Self::Sub)))(i)
-    }
-}
-impl Operator for AddSubBaseOp {
-    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
-        if let (Value::IntSlice(l), Value::IntSlice(r)) = (left, right) {
-            let mut l = l.clone();
-            l.extend_from_slice(r);
-            return Ok(Value::IntSlice(l));
+macro_rules! operator_group {
+    ($name:ident($l:ident, $r:ident): $( $opname:ident, $opeval:expr, $optext:literal $(, $opalt:literal )* ;)+) => {
+        #[derive(Debug, Copy, Clone)]
+        pub enum $name {
+            $( $opname ),+
         }
-        let l = left.to_int();
-        let r = right.to_int();
-        let result = match self {
-            Self::Add => l.wrapping_add(r),
-            Self::Sub => l.wrapping_sub(r),
-        };
-        Ok(Value::Int(result))
-    }
-}
-impl Display for AddSubBaseOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Add => write!(f, "+"),
-            Self::Sub => write!(f, "-"),
+        impl Parse for $name {
+            fn parse(i: &str) -> IResult<&str, Self> {
+                alt((
+                    $(
+                        value(Self::$opname, alt((
+                            tag($optext),
+                            $(tag($opalt)),*
+                        )))
+                    ),+
+                ))(i)
+            }
         }
-    }
+        impl Operator for $name {
+            fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
+                let $l = left.to_int();
+                let $r = right.to_int();
+                let result = match self {
+                    $(
+                        Self::$opname => $opeval,
+                    )+
+                };
+                Ok(result)
+            }
+        }
+        impl Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                match self {
+                    $(
+                        Self::$opname => write!(f, $optext),
+                    )+
+                }
+            }
+        }
+    };
 }
 
+operator_group! {
+    AddSubBaseOp(l, r):
+        Add, Value::Int(l.wrapping_add(r)), "+";
+        Sub, Value::Int(l.wrapping_sub(r)), "-";
+}
 type AddSubOp = MaybeElementwise<AddSubBaseOp>;
 
-#[derive(Debug)]
-pub enum MulDivBaseOp {
-    Mul, // *
-    Div, // /
+operator_group! {
+    MulDivBaseOp(l, r):
+        Mul, Value::Int(l.wrapping_mul(r)), "*";
+        Div, Value::Int(l.wrapping_div(r)), "/";
 }
-impl Parse for MulDivBaseOp {
-    fn parse(i: &str) -> IResult<&str, Self> {
-        alt((tag("*").map(|_| Self::Mul), tag("/").map(|_| Self::Div)))(i)
-    }
-}
-impl Operator for MulDivBaseOp {
-    fn apply(&self, left: &Value, right: &Value) -> Result<Value, String> {
-        let l = left.to_int();
-        let r = right.to_int();
-        let result = match self {
-            Self::Mul => l.wrapping_mul(r),
-            Self::Div => l.wrapping_div(r),
-        };
-        Ok(Value::Int(result))
-    }
-}
-impl Display for MulDivBaseOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Mul => write!(f, "*"),
-            Self::Div => write!(f, "/"),
-        }
-    }
-}
-
 type MulDivOp = MaybeElementwise<MulDivBaseOp>;
 
 #[derive(Debug)]
@@ -774,55 +761,16 @@ impl<Op: Operator + Display> Display for MaybeElementwise<Op> {
     }
 }
 
+operator_group! {
+    CompareBaseOp(l, r):
+        Unequal, Value::Bool(l != r), "!=", "<>"; // must precede Less
+        LessEq, Value::Bool(l <= r), "<=", "=<"; // must precede Less and Equal
+        Less, Value::Bool(l < r), "<";
+        GreaterEq, Value::Bool(l >= r), ">=", "=>"; // must precede Greater and Equal
+        Greater, Value::Bool(l > r), ">";
+        Equal, Value::Bool(l == r), "==", "=";
+}
 pub type CompareOp = MaybeElementwise<CompareBaseOp>;
-
-#[derive(Debug)]
-pub enum CompareBaseOp {
-    Less,      // <
-    LessEq,    // <=, =<
-    Greater,   // >
-    GreaterEq, // >=, =>
-    Equal,     // ==, =
-    Unequal,   // !=, <>
-}
-impl Parse for CompareBaseOp {
-    fn parse(i: &str) -> IResult<&str, Self> {
-        alt((
-            alt((tag("<="), tag("=<"))).map(|_| Self::LessEq),
-            tag("<").map(|_| Self::Less),
-            alt((tag(">="), tag("=>"))).map(|_| Self::GreaterEq),
-            tag(">").map(|_| Self::Greater),
-            alt((tag("=="), tag("="))).map(|_| Self::Equal),
-            alt((tag("!="), tag("<>"))).map(|_| Self::Unequal),
-        ))(i)
-    }
-}
-impl Operator for CompareBaseOp {
-    fn apply(&self, l: &Value, r: &Value) -> Result<Value, String> {
-        let l = l.to_int();
-        let r = r.to_int();
-        Ok(Value::Bool(match self {
-            Self::Less => l < r,
-            Self::LessEq => l <= r,
-            Self::Greater => l > r,
-            Self::GreaterEq => l >= r,
-            Self::Equal => l == r,
-            Self::Unequal => l != r,
-        }))
-    }
-}
-impl Display for CompareBaseOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Less => write!(f, "<"),
-            Self::LessEq => write!(f, "<="),
-            Self::Greater => write!(f, ">"),
-            Self::GreaterEq => write!(f, ">="),
-            Self::Equal => write!(f, "=="),
-            Self::Unequal => write!(f, "!="),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum ModOp {
