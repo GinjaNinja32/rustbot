@@ -113,29 +113,34 @@ macro_rules! test_command_eval {
 fn test_command() {
     test_parser!(
     Command:
-        "2d6" => Command::Simple(_),
-        "A: 42; B: $Ad6; $A and $B" => Command::Complex{ bindings, output }
-            if matches!(bindings.as_slice(), [('A', _), ('B', _)])
-            && matches!(output.as_slice(), [OutputSegment::Value('A'), OutputSegment::Text(and), OutputSegment::Value('B')] if and == " and "),
+        "2d6" => Command{ bindings, output }
+            if bindings.0.is_empty()
+            && matches!(output, CommandResult::Simple(_)),
+
+        "A: 42; B: $Ad6;; $A and $B" => Command{ bindings, output }
+            if matches!(bindings.0.as_slice(), [('A', _), ('B', _)])
+            && matches!(output, CommandResult::Complex(segments)
+                if matches!(segments.as_slice(), [OutputSegment::Value('A'), OutputSegment::Text(and), OutputSegment::Value('B')] if and == " and ")
+            ),
     );
 
     test_command_eval!(
         "2d6" => "[3, 6]: 2d6:[3, 6]",
         "6#s4d6" => "[11, 17, 10, 17, 10, 12]: s4d6:[3, 6, 1, 1], s4d6:[5, 3, 5, 4], s4d6:[2, 2, 3, 3], s4d6:[3, 6, 6, 2], s4d6:[5, 1, 1, 3], s4d6:[4, 2, 3, 3]",
-        "R: 2d6; $R" => "[3, 6]",
+        "R: 2d6;; $R" => "[3, 6]",
 
         // '!space 1' through '!space 6'
-        "D:1; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:1; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3] (1): 0 successes, 0 sixes, 0 ones",
-        "D:2; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:2; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3, 6] (2): 1 success, 1 six - crit, 0 ones",
-        "D:3; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:3; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3, 6, 1] (3): 1 success, 1 six, 1 one",
-        "D:4; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:4; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3, 6, 1, 1] (4): 1 success, 1 six, 2 ones - critfail",
-        "D:5; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:5; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3, 6, 1, 1, 4] (5): 1 success, 1 six, 2 ones",
-        "D:6; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
+        "D:6; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; $R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]"
             => "[3, 6, 1, 1, 4, 5] (6): 2 successes, 1 six, 2 ones",
     );
 }

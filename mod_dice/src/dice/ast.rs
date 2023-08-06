@@ -45,26 +45,42 @@ pub trait Operator: Parse {
 }
 
 #[derive(Debug)]
-pub enum Command {
+pub enum CommandResult {
     Simple(Expression),
-    Complex {
-        bindings: Vec<(char, Expression)>,
-        output: Vec<OutputSegment>,
-    },
+    Complex(Vec<OutputSegment>),
+}
+impl Parse for CommandResult {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            Expression::parse.map(Self::Simple),
+            preceded(ws(tag(";")), many0(OutputSegment::parse).map(Self::Complex)),
+        ))(i)
+    }
+}
+
+#[derive(Debug)]
+pub struct Bindings(pub Vec<(char, Expression)>);
+impl Parse for Bindings {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        many0(tuple((
+            terminated(anychar, tag(":")),
+            terminated(Expression::parse, ws(tag(";"))),
+        )))
+        .map(Self)
+        .parse(i)
+    }
+}
+
+#[derive(Debug)]
+pub struct Command {
+    pub bindings: Bindings,
+    pub output: CommandResult,
 }
 impl Parse for Command {
     fn parse(i: &str) -> IResult<&str, Self> {
-        let (i, res) = alt((
-            tuple((
-                separated_list1(ws(tag(";")), tuple((terminated(anychar, tag(":")), Expression::parse))),
-                preceded(ws(tag(";")), many0(output_segment)),
-            ))
-            .map(|(bindings, output)| Self::Complex { bindings, output }),
-            Expression::parse.map(Self::Simple),
-        ))(i)?;
-        let (i, _) = eof(i)?;
-
-        Ok((i, res))
+        terminated(tuple((Bindings::parse, CommandResult::parse)), eof)
+            .map(|(bindings, output)| Self { bindings, output })
+            .parse(i)
     }
 }
 impl Command {
@@ -72,20 +88,20 @@ impl Command {
         Self::parse(input).map(|(_, c)| c).map_err(|e| format!("{e}"))
     }
     pub fn eval<R: Rng + ?Sized>(&self, limit: &mut Limiter, rng: &mut R) -> Result<Vec<Span>, String> {
-        match self {
-            Self::Simple(expr) => {
-                let (s, v) = expr.eval(limit, rng, &BTreeMap::new())?;
+        let mut vals = BTreeMap::new();
+
+        for (ch, expr) in &self.bindings.0 {
+            let (_, v) = expr.eval(limit, rng, &vals)?;
+            vals.insert(*ch, v);
+        }
+
+        match &self.output {
+            CommandResult::Simple(expr) => {
+                let (s, v) = expr.eval(limit, rng, &vals)?;
 
                 Ok(spans!(v.to_string(), ": ", s))
             }
-            Self::Complex { bindings, output } => {
-                let mut vals = BTreeMap::new();
-
-                for (ch, expr) in bindings {
-                    let (_, v) = expr.eval(limit, rng, &vals)?;
-                    vals.insert(*ch, v);
-                }
-
+            CommandResult::Complex(output) => {
                 let mut spans = vec![];
                 let mut last_plural = false;
                 for seg in output {
@@ -144,47 +160,49 @@ impl Command {
     }
 }
 
-fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
-    alt((
-        preceded(
-            tag("%"),
-            alt((
-                tag("s").map(|_| OutputSegment::Plural(String::new(), "s".into())),
-                delimited(
-                    tag("["),
-                    separated_pair(
-                        take_while(|c| c != '|' && c != ']').map(String::from),
-                        tag("|"),
-                        take_while(|c| c != ']').map(String::from),
-                    ),
-                    tag("]"),
-                )
-                .map(|(sg, pl)| OutputSegment::Plural(sg, pl)),
-                delimited(tag("["), take_while(|c| c != ']').map(String::from), tag("]"))
-                    .map(|pl| OutputSegment::Plural(String::new(), pl)),
-            )),
-        ),
-        tuple((
-            preceded(tuple((tag("%"), tag("$"))), anychar),
-            delimited(
-                tag("["),
-                separated_list1(tag("|"), take_while(|c| c != '|' && c != ']').map(String::from)),
-                tag("]"),
-            ),
-        ))
-        .map(|(ch, lst)| OutputSegment::Select(ch, lst)),
-        preceded(tag("$"), anychar).map(OutputSegment::Value),
-        take_while1(|c| c != '%' && c != '$')
-            .map(String::from)
-            .map(OutputSegment::Text),
-    ))(i)
-}
 #[derive(Debug)]
 pub enum OutputSegment {
     Text(String),
     Value(char),
     Plural(String, String),
     Select(char, Vec<String>),
+}
+impl Parse for OutputSegment {
+    fn parse(i: &str) -> IResult<&str, Self> {
+        alt((
+            preceded(
+                tag("%"),
+                alt((
+                    tag("s").map(|_| OutputSegment::Plural(String::new(), "s".into())),
+                    delimited(
+                        tag("["),
+                        separated_pair(
+                            take_while(|c| c != '|' && c != ']').map(String::from),
+                            tag("|"),
+                            take_while(|c| c != ']').map(String::from),
+                        ),
+                        tag("]"),
+                    )
+                    .map(|(sg, pl)| OutputSegment::Plural(sg, pl)),
+                    delimited(tag("["), take_while(|c| c != ']').map(String::from), tag("]"))
+                        .map(|pl| OutputSegment::Plural(String::new(), pl)),
+                )),
+            ),
+            tuple((
+                preceded(tuple((tag("%"), tag("$"))), anychar),
+                delimited(
+                    tag("["),
+                    separated_list1(tag("|"), take_while(|c| c != '|' && c != ']').map(String::from)),
+                    tag("]"),
+                ),
+            ))
+            .map(|(ch, lst)| OutputSegment::Select(ch, lst)),
+            preceded(tag("$"), anychar).map(OutputSegment::Value),
+            take_while1(|c| c != '%' && c != '$')
+                .map(String::from)
+                .map(OutputSegment::Text),
+        ))(i)
+    }
 }
 
 #[derive(Debug, PartialEq)]

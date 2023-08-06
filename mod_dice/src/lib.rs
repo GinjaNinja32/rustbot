@@ -43,7 +43,7 @@ fn cmd_space(ctx: &dyn Context, args: &str) -> Result<()> {
     };
 
     let expr = format!(
-        "D:{count}; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T; {desc}$R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]",
+        "D:{count}; R:$Dd6; C:s($Re=6); O:s($Re=1); S:s($Re>=5); T:($D+1)/2; c:$C>=$T; o:$O>=$T;; {desc}$R ($D): $S success%[es], $C six%[es]%$c[| - crit], $O one%s%$o[| - critfail]",
     );
 
     cmd_dice(ctx, &expr)
