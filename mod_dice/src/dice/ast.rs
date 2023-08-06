@@ -2,7 +2,7 @@ use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 
 use rustbot::prelude::{span_join, Color, Format, FormatColor, Span};
 use rustbot::{span, spans};
@@ -182,27 +182,37 @@ pub enum OutputSegment {
     Select(char, Vec<String>),
 }
 
-#[derive(Debug)]
-pub struct Expression {
-    pub repeat: Repeat, // ...
-}
+#[derive(Debug, PartialEq)]
+pub struct Expression(Repeat);
 impl Parse for Expression {
     fn parse(i: &str) -> IResult<&str, Self> {
         let (i, repeat) = ws(Repeat::parse)(i)?;
 
-        Ok((i, Expression { repeat }))
+        Ok((i, Expression(repeat)))
     }
 }
 impl Evaluable for Expression {
     fn eval(&self, limit: &mut Limiter, values: &BTreeMap<char, Value>) -> Result<(Vec<Span>, Value), String> {
-        self.repeat.eval(limit, values)
+        self.0.eval(limit, values)
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct Repeat {
     pub repeat: Option<i64>, // ( integer "#" )?
     pub term: Comparison,    // ...
+}
+impl Debug for Repeat {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.repeat.is_some() {
+            f.debug_struct("Repeat")
+                .field("repeat", &self.repeat)
+                .field("term", &self.term)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.term)
+        }
+    }
 }
 impl Parse for Repeat {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -232,10 +242,22 @@ impl Evaluable for Repeat {
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct Comparison {
     pub left: AddSub,                       // ...
     pub right: Option<(CompareOp, AddSub)>, // ( operator ... )?
+}
+impl Debug for Comparison {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.right.is_some() {
+            f.debug_struct("Comparison")
+                .field("left", &self.left)
+                .field("right", &self.right)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.left)
+        }
+    }
 }
 impl Parse for Comparison {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -260,10 +282,22 @@ impl Evaluable for Comparison {
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct BinaryOpClass<Sub: Evaluable, Op: Operator + Display> {
     pub left: Sub,
     pub right: Vec<(Op, Sub)>,
+}
+impl<Sub: Evaluable + Debug, Op: Operator + Display + Debug> Debug for BinaryOpClass<Sub, Op> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.right.is_empty() {
+            write!(f, "{:?}", self.left)
+        } else {
+            f.debug_struct(stringify!(Sub))
+                .field("left", &self.left)
+                .field("right", &self.right)
+                .finish()
+        }
+    }
 }
 impl<Sub: Evaluable, Op: Operator + Display + 'static> Parse for BinaryOpClass<Sub, Op> {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -292,10 +326,22 @@ pub type AddSub = BinaryOpClass<MulDiv, AddSubOp>;
 
 pub type MulDiv = BinaryOpClass<Sum, MulDivOp>;
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct Sum {
     pub is_sum: bool,  // ( "s" )?
     pub term: DiceMod, // ...
+}
+impl Debug for Sum {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.is_sum {
+            f.debug_struct("Sum")
+                .field("is_sum", &self.is_sum)
+                .field("term", &self.term)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.term)
+        }
+    }
 }
 impl Parse for Sum {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -317,10 +363,22 @@ impl Evaluable for Sum {
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct DiceMod {
     pub roll: DiceRoll,                // ...
     pub op: Option<(ModOp, AstValue)>, // ( operator ... )?
+}
+impl Debug for DiceMod {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.op.is_some() {
+            f.debug_struct("DiceMod")
+                .field("roll", &self.roll)
+                .field("op", &self.op)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.roll)
+        }
+    }
 }
 impl Parse for DiceMod {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -352,7 +410,7 @@ impl Evaluable for DiceMod {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Explode {
     Default,
     Target(i64),
@@ -379,7 +437,7 @@ impl Display for Explode {
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq)]
 pub enum DiceRoll {
     NoRoll(AstValue), // ...
     Index {
@@ -392,6 +450,25 @@ pub enum DiceRoll {
         sides: Option<AstValue>,  // ( ... )?
         explode: Option<Explode>, // ( "!" ( integer )? )?
     },
+}
+impl Debug for DiceRoll {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::NoRoll(value) => write!(f, "{:?}", value),
+            Self::Index { val, each, index } => f
+                .debug_struct("Index")
+                .field("val", val)
+                .field("each", each)
+                .field("index", index)
+                .finish(),
+            Self::Roll { count, sides, explode } => f
+                .debug_struct("Roll")
+                .field("count", count)
+                .field("sides", sides)
+                .field("explode", explode)
+                .finish(),
+        }
+    }
 }
 impl Parse for DiceRoll {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -585,7 +662,7 @@ impl DiceRoll {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AstValue {
     Int(i64),               // ...
     Sub(Box<Expression>),   // "(" ... ")"
@@ -645,7 +722,7 @@ impl Evaluable for AstValue {
 
 macro_rules! operator_group {
     ($name:ident($l:ident, $r:ident): $( $opname:ident, $opeval:expr, $optext:literal $(, $opalt:literal )* ;)+) => {
-        #[derive(Debug, Copy, Clone)]
+        #[derive(Debug, Copy, Clone, PartialEq)]
         pub enum $name {
             $( $opname ),+
         }
@@ -690,20 +767,20 @@ operator_group! {
         Add, Value::Int(l.wrapping_add(r)), "+";
         Sub, Value::Int(l.wrapping_sub(r)), "-";
 }
-type AddSubOp = MaybeElementwise<AddSubBaseOp>;
+pub type AddSubOp = MaybeElementwise<AddSubBaseOp>;
 
 operator_group! {
     MulDivBaseOp(l, r):
         Mul, Value::Int(l.wrapping_mul(r)), "*";
         Div, Value::Int(l.wrapping_div(r)), "/";
 }
-type MulDivOp = MaybeElementwise<MulDivBaseOp>;
+pub type MulDivOp = MaybeElementwise<MulDivBaseOp>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MaybeElementwise<Op: Operator> {
-    each_left: bool,
-    op: Op,
-    each_right: bool,
+    pub each_left: bool,
+    pub op: Op,
+    pub each_right: bool,
 }
 impl<Op: Operator> Parse for MaybeElementwise<Op> {
     fn parse(i: &str) -> IResult<&str, Self> {
@@ -774,7 +851,7 @@ operator_group! {
 }
 pub type CompareOp = MaybeElementwise<CompareBaseOp>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ModOp {
     DropLowest,  // l
     DropHighest, // h

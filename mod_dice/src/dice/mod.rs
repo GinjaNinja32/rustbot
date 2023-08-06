@@ -1,6 +1,9 @@
 mod ast;
 mod value;
 
+#[cfg(test)]
+mod test;
+
 pub use ast::Command;
 
 pub mod limits {
