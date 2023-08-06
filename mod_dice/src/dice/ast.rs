@@ -39,6 +39,7 @@ pub trait Operator: Parse {
     fn apply(&self, left: &Value, right: &Value) -> Result<Value, String>;
 }
 
+#[derive(Debug)]
 pub enum Command {
     Simple(Expression),
     Complex {
@@ -173,6 +174,7 @@ fn output_segment(i: &str) -> IResult<&str, OutputSegment> {
             .map(OutputSegment::Text),
     ))(i)
 }
+#[derive(Debug)]
 pub enum OutputSegment {
     Text(String),
     Value(char),
