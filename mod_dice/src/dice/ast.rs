@@ -29,16 +29,17 @@ where
     delimited(multispace0, inner, multispace0)
 }
 
+pub struct EvalContext<'a, R: Rng + ?Sized> {
+    pub limit: &'a mut Limiter,
+    pub rng: &'a mut R,
+    pub values: BTreeMap<char, Value>,
+}
+
 pub trait Parse: Sized {
     fn parse(i: &str) -> IResult<&str, Self>;
 }
 pub trait Evaluable: Parse {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String>;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String>;
 }
 pub trait Operator: Parse {
     fn apply(&self, left: &Value, right: &Value) -> Result<Value, String>;
@@ -88,16 +89,20 @@ impl Command {
         Self::parse(input).map(|(_, c)| c).map_err(|e| format!("{e}"))
     }
     pub fn eval<R: Rng + ?Sized>(&self, limit: &mut Limiter, rng: &mut R) -> Result<Vec<Span>, String> {
-        let mut vals = BTreeMap::new();
+        let mut ctx = EvalContext {
+            limit,
+            rng,
+            values: BTreeMap::new(),
+        };
 
         for (ch, expr) in &self.bindings.0 {
-            let (_, v) = expr.eval(limit, rng, &vals)?;
-            vals.insert(*ch, v);
+            let (_, v) = expr.eval(&mut ctx)?;
+            ctx.values.insert(*ch, v);
         }
 
         match &self.output {
             CommandResult::Simple(expr) => {
-                let (s, v) = expr.eval(limit, rng, &vals)?;
+                let (s, v) = expr.eval(&mut ctx)?;
 
                 Ok(spans!(v.to_string(), ": ", s))
             }
@@ -107,7 +112,7 @@ impl Command {
                 for seg in output {
                     match seg {
                         OutputSegment::Text(s) => spans.push(span! {s}),
-                        OutputSegment::Value(ch) => match vals.get(ch) {
+                        OutputSegment::Value(ch) => match ctx.values.get(ch) {
                             Some(v) => {
                                 if let Value::Int(1) = v {
                                     last_plural = false
@@ -120,7 +125,7 @@ impl Command {
                                 return Err(format!("binding ${ch} not defined"));
                             }
                         },
-                        OutputSegment::Select(ch, strs) => match vals.get(ch) {
+                        OutputSegment::Select(ch, strs) => match ctx.values.get(ch) {
                             None => {
                                 return Err(format!("binding ${ch} not defined"));
                             }
@@ -215,13 +220,8 @@ impl Parse for Expression {
     }
 }
 impl Evaluable for Expression {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
-        self.0.eval(limit, rng, values)
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+        self.0.eval(ctx)
     }
 }
 
@@ -251,18 +251,13 @@ impl Parse for Repeat {
     }
 }
 impl Evaluable for Repeat {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
         match self.repeat {
-            None => self.term.eval(limit, rng, values),
+            None => self.term.eval(ctx),
             Some(n) => {
                 let (strs, vals) = (0..n)
                     .map(|_| {
-                        let (s, v) = self.term.eval(limit, rng, values)?;
+                        let (s, v) = self.term.eval(ctx)?;
                         Ok((s, v.to_int()))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
@@ -301,17 +296,12 @@ impl Parse for Comparison {
     }
 }
 impl Evaluable for Comparison {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
-        let l = self.left.eval(limit, rng, values)?;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+        let l = self.left.eval(ctx)?;
         match &self.right {
             None => Ok(l),
             Some((op, term)) => {
-                let r = term.eval(limit, rng, values)?;
+                let r = term.eval(ctx)?;
                 let v = op.apply(&l.1, &r.1)?;
 
                 Ok((spans!(l.0, format!("{}", op), r.0), v))
@@ -346,16 +336,11 @@ impl<Sub: Evaluable, Op: Operator + Display + 'static> Parse for BinaryOpClass<S
     }
 }
 impl<Sub: Evaluable, Op: Operator + Display + 'static> Evaluable for BinaryOpClass<Sub, Op> {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
-        let (s, mut l) = self.left.eval(limit, rng, values)?;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+        let (s, mut l) = self.left.eval(ctx)?;
         let mut ss = s;
         for elem in &self.right {
-            let (mut rs, r) = elem.1.eval(limit, rng, values)?;
+            let (mut rs, r) = elem.1.eval(ctx)?;
 
             ss.push(format!("{}", elem.0).into());
             ss.append(&mut rs);
@@ -396,13 +381,8 @@ impl Parse for Sum {
     }
 }
 impl Evaluable for Sum {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
-        let (s, v) = self.term.eval(limit, rng, values)?;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+        let (s, v) = self.term.eval(ctx)?;
         if self.is_sum {
             Ok((spans!("s", s), Value::Int(v.to_int())))
         } else {
@@ -437,24 +417,19 @@ impl Parse for DiceMod {
     }
 }
 impl Evaluable for DiceMod {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
         match &self.op {
-            None => self.roll.eval(limit, rng, values),
+            None => self.roll.eval(ctx),
             Some((op, r)) => match self.roll {
                 DiceRoll::NoRoll(_) | DiceRoll::Index { .. } => {
-                    let l = self.roll.eval(limit, rng, values)?;
-                    let (rs, rv) = r.eval(limit, rng, values)?;
+                    let l = self.roll.eval(ctx)?;
+                    let (rs, rv) = r.eval(ctx)?;
                     let (_, v) = op.apply(l.1, rv)?;
                     Ok((spans!(l.0, format!("{}", op), rs), v))
                 }
                 DiceRoll::Roll { .. } => {
-                    let (s, l) = self.roll._eval(limit, rng, values)?;
-                    let (rs, rv) = r.eval(limit, rng, values)?;
+                    let (s, l) = self.roll._eval(ctx)?;
+                    let (rs, rv) = r.eval(ctx)?;
                     let (vs, v) = op.apply(l, rv)?;
                     Ok((spans!(s, format!("{}", op), rs, ":", vs), v))
                 }
@@ -547,13 +522,8 @@ impl Parse for DiceRoll {
     }
 }
 impl Evaluable for DiceRoll {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
-        let (s, r) = self._eval(limit, rng, values)?;
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
+        let (s, r) = self._eval(ctx)?;
         match self {
             DiceRoll::NoRoll(_) | DiceRoll::Index { .. } => Ok((s, r)),
             DiceRoll::Roll { .. } => Ok((spans!(s, ":", r.to_string()), r)),
@@ -610,17 +580,12 @@ impl DiceOptions {
 }
 
 impl DiceRoll {
-    fn _eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
+    fn _eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
         match self {
-            DiceRoll::NoRoll(v) => v.eval(limit, rng, values),
+            DiceRoll::NoRoll(v) => v.eval(ctx),
             DiceRoll::Index { val, each, index } => {
-                let (sv, v) = val.eval(limit, rng, values)?;
-                let (si, i) = index.eval(limit, rng, values)?;
+                let (sv, v) = val.eval(ctx)?;
+                let (si, i) = index.eval(ctx)?;
 
                 if *each {
                     let val = i
@@ -640,7 +605,7 @@ impl DiceRoll {
             } => {
                 let (cs, c) = match cv {
                     Some(v) => {
-                        let (vs, vv) = v.eval(limit, rng, values)?;
+                        let (vs, vv) = v.eval(ctx)?;
                         let count = vv.to_int();
                         (vs, count)
                     }
@@ -653,7 +618,7 @@ impl DiceRoll {
 
                 let (ss, s) = match sv {
                     Some(v) => {
-                        let (vs, vv) = v.eval(limit, rng, values)?;
+                        let (vs, vv) = v.eval(ctx)?;
                         let opts: DiceOptions = match vv {
                             Value::Int(i) if i >= 1 => DiceOptions::Range(1, i),
                             Value::Int(0) => return Err("cannot roll a d0".to_string()),
@@ -684,10 +649,16 @@ impl DiceRoll {
                 }
 
                 let n_options = s.get_options();
-                limit.use_entropy(n as u64, n_options)?;
+                ctx.limit.use_entropy(n as u64, n_options)?;
 
                 // let mut rng = thread_rng();
                 let mut entropy_err = None;
+
+                // Rust can't see that these two borrows don't overlap without it being spelled
+                // out here.
+                let rng = &mut ctx.rng;
+                let limit = &mut ctx.limit;
+
                 let results = std::iter::repeat_with(|| s.roll(rng))
                     .take_while(|&roll| {
                         if n == 0 {
@@ -753,23 +724,18 @@ impl Parse for AstValue {
     }
 }
 impl Evaluable for AstValue {
-    fn eval<R: Rng + ?Sized>(
-        &self,
-        limit: &mut Limiter,
-        rng: &mut R,
-        values: &BTreeMap<char, Value>,
-    ) -> Result<(Vec<Span>, Value), String> {
+    fn eval<R: Rng + ?Sized>(&self, ctx: &mut EvalContext<R>) -> Result<(Vec<Span>, Value), String> {
         match self {
             AstValue::Int(i) => Ok((spans!(format!("{}", i)), Value::Int(*i))),
             AstValue::Sub(expr) => {
-                let (es, ev) = expr.eval(limit, rng, values)?;
+                let (es, ev) = expr.eval(ctx)?;
                 Ok((spans!("(", es, ")"), ev))
             }
             AstValue::Slice(s) => {
                 let (strs, vals) = s
                     .iter()
                     .map(|e| {
-                        let (s, v) = e.eval(limit, rng, values)?;
+                        let (s, v) = e.eval(ctx)?;
                         Ok((s, v.to_int()))
                     })
                     .collect::<Result<Vec<(Vec<Span>, _)>, String>>()?
@@ -780,7 +746,7 @@ impl Evaluable for AstValue {
             }
             AstValue::Fate => Ok((spans!("F"), Value::IntSlice(vec![-1, 0, 1]))),
             AstValue::Hundred => Ok((spans!("%"), Value::Int(100))),
-            AstValue::Binding(ch) => match values.get(ch) {
+            AstValue::Binding(ch) => match ctx.values.get(ch) {
                 Some(v) => Ok((spans!("$", format!("{}", ch)), v.clone())),
                 None => Err(format!("binding ${ch} not defined")),
             },

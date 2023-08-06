@@ -45,12 +45,6 @@ macro_rules! test_evaluation {
         $( $input:literal $(where { $( $name:literal: $val:expr ),* })? => $value:expr,)*) => {
         $(
             {
-                let mut limit = Limiter::new(100);
-                #[allow(unused_mut)]
-                let mut vals = BTreeMap::new();
-                $($(
-                    vals.insert($name, $val);
-                )*)?
                 let ast = match $node::parse($input).unwrap() {
                     ("", ast) => ast,
                     (leftover, ast) => {
@@ -62,9 +56,20 @@ macro_rules! test_evaluation {
                     }
                 };
 
-                let mut rng = StdRng::seed_from_u64(0);
+                #[allow(unused_mut)]
+                let mut values = BTreeMap::new();
+                $($(
+                    values.insert($name, $val);
+                )*)?
 
-                let value = ast.eval(&mut limit, &mut rng, &vals).unwrap().1;
+
+                let mut ctx = EvalContext {
+                    limit: &mut Limiter::new(100),
+                    rng: &mut StdRng::seed_from_u64(0),
+                    values,
+                };
+
+                let value = ast.eval(&mut ctx).unwrap().1;
                 if value != $value {
                     panic!("result did not match expectation\ninput: {:?}\nexpect: {:?}\ngot: {:?}",
                         $input,
