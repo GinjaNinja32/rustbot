@@ -1,5 +1,3 @@
-use bitflags::bitflags;
-
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Color {
     None = -1,
@@ -53,12 +51,19 @@ impl std::ops::Add<Format> for Color {
     }
 }
 
-bitflags! {
-    pub struct Format: u8 {
-        const None = 0x00;
-        const Bold = 0x01;
-        const Italic = 0x02;
-        const Underline = 0x04;
+// some hackery to get clippy to shut up about the casing of Format::None etc
+pub use format::Format;
+#[allow(clippy::module_inception)]
+mod format {
+    #![allow(non_upper_case_globals)]
+    use bitflags::bitflags;
+    bitflags! {
+        pub struct Format: u8 {
+            const None = 0x00;
+            const Bold = 0x01;
+            const Italic = 0x02;
+            const Underline = 0x04;
+        }
     }
 }
 
