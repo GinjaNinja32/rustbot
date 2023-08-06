@@ -1,3 +1,5 @@
+use rand::thread_rng;
+
 mod dice;
 mod swrpg;
 
@@ -18,7 +20,7 @@ fn cmd_dice(ctx: &dyn Context, args: &str) -> Result<()> {
     }
     let v = dice::Command::new(args).map_err(UserError::new)?;
     let mut limit = dice::limits::Limiter::new(10000);
-    let result = v.eval(&mut limit).map_err(UserError::new)?;
+    let result = v.eval(&mut limit, &mut thread_rng()).map_err(UserError::new)?;
     ctx.reply(Message::Spans(result))
 }
 

@@ -12,6 +12,16 @@ pub enum Span<'a> {
     DiscordEmoji(Cow<'a, str>, u64),
 }
 
+pub fn spans_to_raw_string(spans: Vec<Span>) -> String {
+    spans
+        .iter()
+        .map(|span| match span {
+            Span::Text { text, .. } => Cow::Borrowed(text.as_ref()),
+            Span::DiscordEmoji(name, _) => Cow::Owned(format!(":{name}:")),
+        })
+        .collect()
+}
+
 impl<'a> From<String> for Span<'a> {
     fn from(s: String) -> Self {
         span!(s)
