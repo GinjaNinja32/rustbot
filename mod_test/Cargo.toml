@@ -9,4 +9,4 @@ crate_type = ["dylib"]
 
 [dependencies]
 rustbot = { path = "../rustbot" }
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "0.13" }
