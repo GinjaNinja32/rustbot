@@ -1,6 +1,6 @@
 use rustbot::prelude::*;
 
-use chrono::{DateTime, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use chrono::{DateTime, Datelike, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
 
 #[no_mangle]
@@ -78,6 +78,7 @@ fn parse_time(time: &[&str], tz: Tz) -> Result<DateTime<Tz>> {
 
     ctx.parse(
         time,
+        tz,
         PartialDateTime {
             year: None,
             month: None,
@@ -112,7 +113,7 @@ struct PartialDateTime {
 }
 
 impl TimeParseCtx {
-    fn parse(&mut self, parts: &[&str], partial: PartialDateTime) -> Result<()> {
+    fn parse(&mut self, parts: &[&str], tz: Tz, partial: PartialDateTime) -> Result<()> {
         if parts.len() == 0 {
             if let (Some(year), Some(month), Some(day), Some(time)) =
                 (partial.year, partial.month, partial.day, partial.time)
@@ -152,6 +153,30 @@ impl TimeParseCtx {
             }
         }
 
+        if let Some(date) = match parts[0].to_lowercase().as_str() {
+            "today" => Some(Utc::now().with_timezone(&tz).date()),
+            "tomorrow" => Utc::now().with_timezone(&tz).date().succ_opt(),
+            "yesterday" => Utc::now().with_timezone(&tz).date().pred_opt(),
+
+            _ => None,
+        } {
+            if partial.year.is_some() || partial.month.is_some() || partial.day.is_some() {
+                return Err(UserError::new("multiple dates specified").into());
+            }
+
+            return self.parse(
+                &parts[1..],
+                tz,
+                PartialDateTime {
+                    year: Some(date.year()),
+                    month: Some(date.month()),
+                    day: Some(date.day()),
+
+                    ..partial
+                },
+            );
+        }
+
         for fmt in &["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"] {
             if let Ok(time) = NaiveTime::parse_from_str(parts[0], fmt) {
                 if partial.time.is_some() {
@@ -162,16 +187,16 @@ impl TimeParseCtx {
                     time: Some(time),
                     ..partial
                 };
-                return self.parse(&parts[1..], next);
+                return self.parse(&parts[1..], tz, next);
             }
         }
 
         let sub = parts[0].split(['-', '/']).collect::<Vec<_>>();
 
-        self.permute_parts(&sub, &parts[1..], partial)
+        self.permute_parts(&sub, &parts[1..], tz, partial)
     }
 
-    fn permute_parts(&mut self, parts: &[&str], rest: &[&str], partial: PartialDateTime) -> Result<()> {
+    fn permute_parts(&mut self, parts: &[&str], rest: &[&str], tz: Tz, partial: PartialDateTime) -> Result<()> {
         match parts.len() {
             3 => {
                 if partial.year.is_some() || partial.day.is_some() || partial.month.is_some() {
@@ -183,6 +208,7 @@ impl TimeParseCtx {
                         if let Ok(day) = try_day(parts[2]) {
                             self.parse(
                                 rest,
+                                tz,
                                 PartialDateTime {
                                     year: Some(year),
                                     month: Some(month),
@@ -200,6 +226,7 @@ impl TimeParseCtx {
                     if let Ok(day) = try_day(parts[1]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 year: Some(year),
                                 month: Some(month),
@@ -213,6 +240,7 @@ impl TimeParseCtx {
                     if let Ok(day) = try_day(parts[0]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 year: Some(year),
                                 month: Some(month),
@@ -232,6 +260,7 @@ impl TimeParseCtx {
                     if let Ok(day) = try_day(parts[1]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 month: Some(month),
                                 day: Some(day),
@@ -244,6 +273,7 @@ impl TimeParseCtx {
                     if let Ok(day) = try_day(parts[0]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 month: Some(month),
                                 day: Some(day),
@@ -258,6 +288,7 @@ impl TimeParseCtx {
                     if let Ok(year) = try_year(parts[0]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 year: Some(year),
                                 ..partial
@@ -269,6 +300,7 @@ impl TimeParseCtx {
                     if let Ok(month) = try_month(parts[0]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 month: Some(month),
                                 ..partial
@@ -280,6 +312,7 @@ impl TimeParseCtx {
                     if let Ok(day) = try_day(parts[0]) {
                         self.parse(
                             rest,
+                            tz,
                             PartialDateTime {
                                 day: Some(day),
                                 ..partial
