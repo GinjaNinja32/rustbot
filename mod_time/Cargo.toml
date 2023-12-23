@@ -1,0 +1,13 @@
+[package]
+name = "mod_time"
+version = "0.1.0"
+authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
+edition = "2018"
+
+[lib]
+crate_type = ["dylib"]
+
+[dependencies]
+rustbot = { path = "../rustbot" }
+chrono = "*"
+chrono-tz = { version = "*", features = ["case-insensitive"] }
