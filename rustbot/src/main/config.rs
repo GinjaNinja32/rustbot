@@ -8,9 +8,12 @@ use rustbot::prelude::*;
 pub struct Config {
     pub postgres: Postgres,
 
+    #[serde(default)]
     pub irc: Vec<Irc>,
+    #[serde(default)]
     pub discord: Vec<Discord>,
 
+    #[serde(default)]
     pub module: BTreeMap<String, toml::Value>,
 }
 

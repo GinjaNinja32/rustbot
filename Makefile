@@ -45,11 +45,11 @@ import csv
 import sys
 
 for row in csv.reader(sys.stdin):
-	print ",".join(row[4:8])
+	print(",".join(row[4:8]))
 endef
 export AIRPORT_PROCESSING
 
 data/airports.csv:
 	curl -s https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat \
-		| python2 -c "$$AIRPORT_PROCESSING" \
+		| python -c "$$AIRPORT_PROCESSING" \
 		> $@
