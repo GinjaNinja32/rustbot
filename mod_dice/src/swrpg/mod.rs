@@ -38,9 +38,7 @@ fn format_single<'a>(n: i8, emoji: Span<'static>, string: &'a str, pl: &'a str) 
 }
 
 pub fn parse_and_eval(input: &str) -> Result<Vec<Span>, String> {
-    let expr = line(&format!("{input}\n"))
-        .map(|(_, c)| c)
-        .map_err(|e| format!("{e:?}"))?;
+    let expr = line(input).map(|(_, c)| c).map_err(|e| format!("{e:?}"))?;
 
     let results: Vec<_> = expr
         .0
