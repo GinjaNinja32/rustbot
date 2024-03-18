@@ -215,12 +215,16 @@ pub fn format_discord(m: Message) -> Result<String> {
         Ok(format!("`{msg}`"))
     } else {
         let (mut res, url) = paste_max_lines(&msg, 11)?;
-        if let Some(u) = url {
-            res.push(u);
-        }
         if code {
-            Ok(format!("```{}```", res.join("\n")))
+            if let Some(u) = url {
+                Ok(format!("```{}```\n{}", res.join("\n"), u))
+            } else {
+                Ok(format!("```{}```", res.join("\n")))
+            }
         } else {
+            if let Some(u) = url {
+                res.push(u);
+            }
             Ok(res.join("\n"))
         }
     }
