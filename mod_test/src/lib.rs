@@ -49,7 +49,7 @@ fn test2(ctx: &dyn Context, args: &str) -> Result<()> {
     parse_args! {args,
         a: u64,
         b: Atom,
-        c: String,
+        c: &str,
     }
 
     ctx.reply(Message::Simple(format!("You passed {:?}", (a, b, c))))

@@ -8,8 +8,8 @@ pub fn get_meta(meta: &mut dyn Meta) {
 }
 
 struct FromUnits(String);
-impl Arg for FromUnits {
-    fn parse_from(input: &str) -> Result<(Self, Option<&str>)> {
+impl<'a> Arg<'a> for FromUnits {
+    fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
         if input.is_empty() {
             bail_user!("missing argument")
         }
