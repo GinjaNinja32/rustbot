@@ -59,7 +59,8 @@ impl Command {
             req_perms: Perms::None,
         }
     }
-    #[must_use] pub fn req_perms(&self, p: Perms) -> Self {
+    #[must_use]
+    pub fn req_perms(&self, p: Perms) -> Self {
         let mut s = self.clone();
         s.req_perms.insert(p);
         s

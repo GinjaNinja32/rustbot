@@ -1308,6 +1308,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mod_utils"
+version = "0.1.0"
+dependencies = [
+ "rustbot",
+]
+
+[[package]]
 name = "mod_weather"
 version = "0.1.0"
 dependencies = [

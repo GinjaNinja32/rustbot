@@ -10,6 +10,7 @@ extern crate toml;
 pub extern crate futures;
 pub extern crate tokio;
 
+pub mod args;
 pub mod duration;
 pub mod error;
 pub mod format;
@@ -17,9 +18,12 @@ pub mod spans;
 pub mod types;
 
 #[cfg(test)]
+mod args_test;
+#[cfg(test)]
 mod test;
 
 pub mod prelude {
+    pub use crate::args::{parse_args, Arg, Atom, Rest};
     pub use crate::bail_user;
     pub use crate::duration::*;
     pub use crate::error::*;

@@ -1,0 +1,11 @@
+[package]
+name = "mod_utils"
+version = "0.1.0"
+authors = ["GinjaNinja32 <ginjaninja32@gmail.com>"]
+edition = "2018"
+
+[lib]
+crate_type = ["dylib"]
+
+[dependencies]
+rustbot = { path = "../rustbot" }

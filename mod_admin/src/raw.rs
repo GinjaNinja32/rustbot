@@ -1,16 +1,19 @@
 use rustbot::prelude::*;
 
 pub fn dmsg(ctx: &dyn Context, args: &str) -> Result<()> {
-    let mut args: Vec<&str> = args.splitn(4, ' ').collect();
-    if args.len() != 4 {
-        bail_user!("usage: dmsg <config_id> <guild> <channel> <message...>")
+    parse_args! {args,
+        config: Atom,
+        guild: Atom,
+        channel: Atom,
+        message: Rest,
     }
 
-    if args[2].chars().collect::<Vec<char>>()[0] == '#' {
-        args[2] = &args[2][1..];
+    let mut channel = channel.as_str();
+    if channel.chars().next().unwrap() == '#' {
+        channel = &channel[1..];
     }
 
-    ctx.bot().dis_send_message(args[0], args[1], args[2], args[3], true)
+    ctx.bot().dis_send_message(&config, &guild, channel, &message, true)
 }
 
 pub fn imsg(ctx: &dyn Context, args: &str) -> Result<()> {

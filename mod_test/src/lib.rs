@@ -32,6 +32,8 @@ pub fn get_meta(meta: &mut dyn Meta) {
         }),
     );
 
+    meta.cmd("test2", Command::new(test2));
+
     thread!(meta, async {
         let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
@@ -41,6 +43,16 @@ pub fn get_meta(meta: &mut dyn Meta) {
 
         server.await
     })
+}
+
+fn test2(ctx: &dyn Context, args: &str) -> Result<()> {
+    parse_args! {args,
+        a: u64,
+        b: Atom,
+        c: String,
+    }
+
+    ctx.reply(Message::Simple(format!("You passed {:?}", (a, b, c))))
 }
 
 async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
