@@ -1,5 +1,6 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
@@ -49,7 +50,7 @@ fn test2(ctx: &dyn Context, args: &str) -> Result<()> {
     parse_args! {args,
         a: u64,
         b: Atom,
-        c: &str,
+        c: Cow<str>,
     }
 
     ctx.reply(Message::Simple(format!("You passed {:?}", (a, b, c))))

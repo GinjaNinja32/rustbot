@@ -82,15 +82,15 @@ impl_ws_with_parse! {
 
 // Atom: a single non-quoted segment
 #[derive(Debug, PartialEq, Eq)]
-pub struct Atom(pub String);
-impl std::ops::Deref for Atom {
-    type Target = String;
-    fn deref(&self) -> &String {
-        &self.0
+pub struct Atom<'a>(pub &'a str);
+impl<'a> std::ops::Deref for Atom<'a> {
+    type Target = str;
+    fn deref(&self) -> &'a str {
+        self.0
     }
 }
 
-impl<'a> Arg<'a> for Atom {
+impl<'a> Arg<'a> for Atom<'a> {
     fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
         if input.is_empty() {
             bail_user!("missing argument")
@@ -101,7 +101,7 @@ impl<'a> Arg<'a> for Atom {
             None => (input, None),
         };
 
-        Ok((Atom(this.to_string()), rest))
+        Ok((Atom(this), rest))
     }
 
     fn describe_expected() -> Cow<'static, str> {
@@ -109,8 +109,8 @@ impl<'a> Arg<'a> for Atom {
     }
 }
 
-// String: a possibly-quoted segment
-impl<'a> Arg<'a> for String {
+// Cow<str>: a possibly-quoted segment
+impl<'a> Arg<'a> for Cow<'a, str> {
     fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
         if input.is_empty() {
             bail_user!("missing argument")
@@ -120,7 +120,7 @@ impl<'a> Arg<'a> for String {
             // Quoted string
             match input[1..].split_once('"') {
                 Some((this, rest)) => {
-                    if rest == "" {
+                    if rest.is_empty() {
                         (this, None)
                     } else if rest.chars().next().unwrap().is_whitespace() {
                         (this, Some(&rest[1..]))
@@ -138,45 +138,7 @@ impl<'a> Arg<'a> for String {
             }
         };
 
-        Ok((this.into(), rest))
-    }
-
-    fn describe_expected() -> Cow<'static, str> {
-        Cow::Borrowed("string")
-    }
-}
-
-
-// String: a possibly-quoted segment
-impl<'a> Arg<'a> for &'a str {
-    fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
-        if input.is_empty() {
-            bail_user!("missing argument")
-        }
-
-        let (this, rest) = if &input[0..1] == "\"" {
-            // Quoted string
-            match input[1..].split_once('"') {
-                Some((this, rest)) => {
-                    if rest == "" {
-                        (this, None)
-                    } else if rest.chars().next().unwrap().is_whitespace() {
-                        (this, Some(&rest[1..]))
-                    } else {
-                        bail_user!("bad quoted string");
-                    }
-                }
-                _ => bail_user!("bad quoted string"),
-            }
-        } else {
-            // Non-quoted string; take everything up to the next whitespace
-            match input.split_once(char::is_whitespace) {
-                Some((this, rest)) => (this, Some(rest)),
-                None => (input, None),
-            }
-        };
-
-        Ok((this.into(), rest))
+        Ok((Cow::Borrowed(this), rest))
     }
 
     fn describe_expected() -> Cow<'static, str> {
@@ -186,21 +148,21 @@ impl<'a> Arg<'a> for &'a str {
 
 // Rest: the rest of the input
 #[derive(Debug, PartialEq, Eq)]
-pub struct Rest(pub String);
-impl std::ops::Deref for Rest {
-    type Target = String;
-    fn deref(&self) -> &String {
-        &self.0
+pub struct Rest<'a>(pub &'a str);
+impl<'a> std::ops::Deref for Rest<'a> {
+    type Target = str;
+    fn deref(&self) -> &'a str {
+        self.0
     }
 }
 
-impl<'a> Arg<'a> for Rest {
+impl<'a> Arg<'a> for Rest<'a> {
     fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
         if input.is_empty() {
             bail_user!("missing argument")
         }
 
-        Ok((Rest(input.to_string()), None))
+        Ok((Rest(input), None))
     }
 
     fn describe_expected() -> Cow<'static, str> {

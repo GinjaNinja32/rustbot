@@ -8,7 +8,7 @@ pub fn dmsg(ctx: &dyn Context, args: &str) -> Result<()> {
         message: Rest,
     }
 
-    let mut channel = channel.as_str();
+    let mut channel: &str = &channel;
     if channel.chars().next().unwrap() == '#' {
         channel = &channel[1..];
     }

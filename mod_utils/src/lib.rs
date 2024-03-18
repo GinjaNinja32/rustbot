@@ -7,8 +7,8 @@ pub fn get_meta(meta: &mut dyn Meta) {
     meta.cmd("units", Command::new(units));
 }
 
-struct FromUnits(String);
-impl<'a> Arg<'a> for FromUnits {
+struct FromUnits<'a>(&'a str);
+impl<'a> Arg<'a> for FromUnits<'a> {
     fn parse_from<'s: 'a>(input: &'s str) -> Result<(Self, Option<&'s str>)> {
         if input.is_empty() {
             bail_user!("missing argument")
@@ -19,7 +19,7 @@ impl<'a> Arg<'a> for FromUnits {
             None => bail_user!("missing separator"),
         };
 
-        Ok((FromUnits(this.to_string()), Some(rest)))
+        Ok((FromUnits(this), Some(rest)))
     }
     fn describe_expected() -> Cow<'static, str> {
         Cow::Borrowed("units-from 'to'")
