@@ -1260,6 +1260,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mod_mpg"
+version = "0.1.0"
+dependencies = [
+ "rustbot",
+]
+
+[[package]]
 name = "mod_randomlist"
 version = "0.1.0"
 dependencies = [
