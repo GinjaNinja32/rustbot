@@ -126,6 +126,8 @@ pub trait Context {
     fn reply(&self, _: Message) -> Result<()>;
     fn perms(&self) -> Result<Perms>;
     fn source(&self) -> &dyn Source;
+
+    fn do_sub(&self, name: &str, msg: &str) -> Result<()>;
 }
 
 pub trait Source {

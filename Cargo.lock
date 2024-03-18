@@ -1244,6 +1244,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mod_debridge"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "regex",
+ "rustbot",
+]
+
+[[package]]
 name = "mod_dice"
 version = "0.1.0"
 dependencies = [

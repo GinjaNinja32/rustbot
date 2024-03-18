@@ -13,25 +13,9 @@ pub struct Context<'a> {
     pub bot_name: String,
 }
 
-impl<'a> types::Context for Context<'a> {
-    fn config_id(&self) -> &str {
-        &self.config
-    }
-
-    fn bot(&self) -> &(dyn Bot + Sync) {
-        self.bot
-    }
-
-    fn source(&self) -> &dyn types::Source {
-        &self.source
-    }
-
-    fn say(&self, message: &str) -> Result<()> {
-        self.reply(Message::Simple(message.to_string()))
-    }
-
-    fn reply(&self, message: Message) -> Result<()> {
-        match &self.source {
+impl<'a> Context<'a> {
+    fn reply_impl(&self, source: &Source, message: Message) -> Result<()> {
+        match source {
             Source::Irc { prefix, channel } => {
                 if let Some(Prefix::User { nick, .. }) = prefix {
                     match channel {
@@ -56,9 +40,32 @@ impl<'a> types::Context for Context<'a> {
             Source::Discord { channel, http, .. } => {
                 channel.say(http, message::format_discord(message)?).map(|_| ())?;
             }
+            Source::Sub { parent, .. } => return self.reply_impl(parent, message),
         }
 
         Ok(())
+    }
+}
+
+impl<'a> types::Context for Context<'a> {
+    fn config_id(&self) -> &str {
+        &self.config
+    }
+
+    fn bot(&self) -> &(dyn Bot + Sync) {
+        self.bot
+    }
+
+    fn source(&self) -> &dyn types::Source {
+        &self.source
+    }
+
+    fn say(&self, message: &str) -> Result<()> {
+        self.reply(Message::Simple(message.to_string()))
+    }
+
+    fn reply(&self, message: Message) -> Result<()> {
+        self.reply_impl(&self.source, message)
     }
 
     fn perms(&self) -> Result<Perms> {
@@ -107,7 +114,24 @@ impl<'a> types::Context for Context<'a> {
                 };
                 Ok(perms)
             }
+            Source::Sub { .. } => Ok(Perms::None), // TODO
         }
+    }
+
+    fn do_sub(&self, name: &str, msg: &str) -> Result<()> {
+        self.bot.handle_inner(
+            &Context {
+                bot: self.bot,
+                config: self.config.clone(),
+                source: Source::Sub {
+                    parent: Box::new(self.source.clone()),
+                    name: name.to_string(),
+                },
+                bot_name: self.bot_name.clone(),
+            },
+            HandleType::PlainMsg,
+            msg,
+        )
     }
 }
 
@@ -125,6 +149,10 @@ pub enum Source {
         cache: serenity::cache::CacheRwLock,
         http: Arc<serenity::http::Http>,
     },
+    Sub {
+        parent: Box<Source>,
+        name: String,
+    },
 }
 
 impl types::Source for Source {
@@ -140,6 +168,7 @@ impl types::Source for Source {
             Source::Discord { user, guild, .. } => {
                 format!("{:?}:{}", guild.map(|g| *g.as_u64()), user.id.as_u64()).into()
             }
+            Source::Sub { parent, name } => format!("{}@{}", parent.user_string(), name).into(),
         }
     }
 
@@ -151,6 +180,7 @@ impl types::Source for Source {
                 None => "???".into(),
             },
             Source::Discord { user, .. } => (&user.name).into(),
+            Source::Sub { name, .. } => name.into(),
         }
     }
 
@@ -170,6 +200,7 @@ impl types::Source for Source {
                     .unwrap_or_else(|| "none".to_string()),
                 channel.as_u64()
             ),
+            Source::Sub { parent, .. } => parent.channel_string().into_owned(),
         }
         .into()
     }

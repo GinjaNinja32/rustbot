@@ -220,7 +220,7 @@ impl Rustbot {
         }
     }
 
-    fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
+    pub fn handle_inner(&self, ctx: &context::Context, mut typ: HandleType, message: &str) -> Result<()> {
         let enabled = {
             let mut db = ctx.bot().sql().lock();
             let mods: Vec<String> = db.query(
