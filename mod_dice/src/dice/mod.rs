@@ -17,21 +17,39 @@ pub mod limits {
         }
 
         pub fn use_entropy(&mut self, count: u64, options: u64) -> Result<(), String> {
-            let entropy = match options
+            let entropy = options
                 .checked_next_power_of_two()
                 .map(u64::trailing_zeros)
-                .and_then(|v| count.checked_mul(u64::from(v)))
-            {
-                Some(v) => v,
-                None => return Err("overflow calculating entropy".to_string()),
-            };
+                .map(u64::from)
+                .unwrap_or(64)
+                .checked_mul(count)
+                .ok_or("overflow calculating entropy")?;
 
-            if self.entropy < entropy {
-                Err("roll too complex".to_string())
-            } else {
-                self.entropy -= entropy;
-                Ok(())
-            }
+            self.entropy = self.entropy.checked_sub(entropy).ok_or("roll too complex")?;
+
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn test_limiter() {
+            let mut l = Limiter::new(10);
+
+            assert_eq!(l.use_entropy(1, 8), Ok(()));
+            assert_eq!(l.use_entropy(1, 8), Ok(()));
+            assert_eq!(l.use_entropy(1, 8), Ok(()));
+            assert_eq!(l.use_entropy(1, 8), Err("roll too complex".into()));
+
+            let mut l = Limiter::new(64);
+
+            assert_eq!(l.use_entropy(1, u64::MAX), Ok(()));
+            assert_eq!(l.use_entropy(1, 2), Err("roll too complex".into()));
+
+            assert_eq!(l.use_entropy(u64::MAX, 4), Err("overflow calculating entropy".into()));
         }
     }
 }
