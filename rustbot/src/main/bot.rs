@@ -1002,25 +1002,34 @@ pub struct Module {
 }
 
 fn load_module(name: &str, lib: Library) -> Result<Module> {
-    let m = Module::try_new(Box::new(lib), |lib| unsafe {
-        match lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") {
+    let m = Module::try_new(Box::new(lib), |lib| {
+        let get_meta = unsafe { lib.get::<unsafe fn(&mut dyn types::Meta)>(b"get_meta") };
+        match get_meta {
             Ok(f) => {
                 let mut m = Meta::new();
-                f(&mut m);
+                unsafe {
+                    f(&mut m);
+                }
                 Ok(m)
             }
-            Err(e) => match lib.get::<unsafe fn(&mut dyn types::Meta, toml::Value) -> Result<()>>(b"get_meta_conf") {
-                Ok(f) => {
-                    if let Some(c) = config::load()?.module.remove(name) {
-                        let mut m = Meta::new();
-                        f(&mut m, c)?;
-                        Ok(m)
-                    } else {
-                        bail!("required config not passed")
+            Err(e) => {
+                let get_meta_conf =
+                    unsafe { lib.get::<unsafe fn(&mut dyn types::Meta, toml::Value) -> Result<()>>(b"get_meta_conf") };
+                match get_meta_conf {
+                    Ok(f) => {
+                        if let Some(c) = config::load()?.module.remove(name) {
+                            let mut m = Meta::new();
+                            unsafe {
+                                f(&mut m, c)?;
+                            }
+                            Ok(m)
+                        } else {
+                            bail!("required config not passed")
+                        }
                     }
+                    Err(e2) => bail!("{}, {}", e, e2),
                 }
-                Err(e2) => bail!("{}, {}", e, e2),
-            },
+            }
         }
     })?;
 
